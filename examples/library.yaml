@@ -1,0 +1,73 @@
+agents:
+  - greet_user: >-
+      Hello {{ .Input }}, welcome to Agencia.
+---
+agents:
+  - repeat_input: >-
+      You just said: "{{ .Input }}". Is that correct?
+---
+agents:
+  - summarize_conversation: >-
+      Summarize the following text:
+
+      {{ .Input }}
+
+      Provide a one-line summary only.
+---
+agents:
+  - extract_keywords: >-
+      From the text below, extract a list of the most important keywords:
+
+      {{ .Input }}
+
+      Return the result as a comma-separated list.
+---
+agents:
+  - sentiment_analysis: >-
+      Analyze the sentiment of the following message:
+
+      {{ .Input }}
+
+      Respond with one word: Positive, Negative, or Neutral.
+---
+agents:
+  - translate_to_french: >-
+      Translate the following sentence into French:
+
+      {{ .Input }}
+---
+agents:
+  - explain_concept: >-
+      Explain the following concept in simple terms that a child could understand:
+
+      {{ .Input }}
+---
+agents:
+  - generate_title: >-
+      Given the following paragraph, generate a concise and catchy title:
+
+      {{ .Input }}
+---
+agents:
+  - code_commenter: >-
+      Add helpful comments to the following block of code:
+
+      {{ .Input }}
+---
+agents:
+  - markdown_to_html: >-
+      Convert the following Markdown content to HTML:
+
+      {{ .Input }}
+---
+agents:
+  - strip_yaml: 
+      function: markdown.StripYamlBlock
+---
+agents:
+  - echo_summary: >-
+      {{ .Get "greet_user" }}
+
+      {{ .Get "repeat_input" }}
+
+      {{ .Get "summarize_conversation" }}

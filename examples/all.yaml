@@ -1,0 +1,121 @@
+agents:
+  - hello_user: |
+      Hello {{ .Input }}! How can I help you today?
+
+  - ask_mood: |
+      How are you feeling today, {{ .Input }}?
+
+formatters:
+  - intro_sequence: |
+      {{ .Get "hello_user" }}
+
+      {{ .Get "ask_mood" }}
+---
+agents:
+  - get_issue: |
+      Please describe the problem you're having in a few sentences.
+
+  - issue_summary: |
+      Summarize the issue below in one line:
+
+      {{ .Input }}
+
+  - triage_decision: |
+      Based on the following summary, should we escalate this to a human agent?
+
+      {{ .Get "issue_summary" }}
+
+      Respond with Yes or No.
+
+formatters:
+  - support_flow: |
+      {{ .Get "get_issue" }}
+
+      {{ .Get "triage_decision" }}
+---
+agents:
+  - write_poem: |
+      Write a short rhyming poem about:
+
+      {{ .Input }}
+
+  - extract_theme: |
+      What is the central theme of the following poem?
+
+      {{ .Input }}
+
+formatters:
+  - poem_analysis: |
+      {{ $poem := .Get "write_poem" }}
+
+      Poem:
+      {{ $poem }}
+
+      Theme:
+      {{ .Get "extract_theme" $poem }}
+---
+agents:
+  - user_description: |
+      The user gave this input: {{ .Input }}
+
+  - json_formatter:
+      function: utils.JSONify
+
+formatters:
+  - structured_log: |
+      {{ .Get "user_description" }}
+
+      {{ .Get "json_formatter" }}
+---
+agents:
+  - summarize_input: |
+      Summarize the text below in 3 bullet points:
+
+      {{ .Input }}
+
+  - turn_summary_into_questions: |
+      Write 3 questions based on the following summary:
+
+      {{ .Get "summarize_input" }}
+
+formatters:
+  - interview_agent: |
+      {{ .Get "summarize_input" }}
+
+      {{ .Get "turn_summary_into_questions" }}
+---
+agents:
+  - translate_to_spanish: |
+      Translate the following to Spanish:
+
+      {{ .Input }}
+
+  - get_sentiment: |
+      Analyze the sentiment of this sentence:
+
+      {{ .Input }}
+
+formatters:
+  - bilingual_report: |
+      Original: {{ .Input }}
+
+      Spanish: {{ .Get "translate_to_spanish" }}
+
+      Sentiment: {{ .Get "get_sentiment" }}
+---
+agents:
+  - extract_yaml_block:
+      function: markdown.ExtractFirstYamlBlock
+
+  - explain_yaml: |
+      Explain the meaning and purpose of the following YAML:
+
+      {{ .Get "extract_yaml_block" }}
+
+formatters:
+  - annotated_yaml: |
+      {{ .Get "extract_yaml_block" }}
+
+      Explanation:
+
+      {{ .Get "explain_yaml" }}
