@@ -1,0 +1,24 @@
+agents:
+  - get_issue: |
+      Issue: {{ .Input }}
+      Please describe the issue in a few bullets.
+
+  - issue_summary: |
+      Summarize the issue below in one line:
+
+      {{ .Input }}
+
+  - triage_decision: |
+      Based on the following summary, should we escalate this to a human agent?
+
+      {{ .Get "issue_summary" }}
+
+      Respond with Yes or No.
+
+formatters:
+  - support_flow: |
+      ### Support Flow
+      {{ .Get "get_issue" }}
+      
+      Triage decision:
+      {{ .Get "triage_decision" }}

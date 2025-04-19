@@ -1,4 +1,4 @@
-package main
+package agencia
 
 import (
 	"bytes"
@@ -10,8 +10,6 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/jessevdk/go-flags"
-	"github.com/joho/godotenv"
 	"github.com/sashabaranov/go-openai"
 	"gopkg.in/yaml.v3"
 )
@@ -44,25 +42,9 @@ var agentRegistry = map[string]Agent{}
 var mockTemplates = map[string]*template.Template{}
 var openaiClient *openai.Client
 
-type RunCommand struct {
-	Name  string `short:"n" long:"name" required:"true" description:"Agent name to run"`
-	Input string `short:"i" long:"input" required:"true" description:"Input string"`
-	File  string `short:"f" long:"file" default:"agentic.yaml" description:"Agent definition YAML file"`
-	Mock  string `short:"m" long:"mock" description:"Path to mock response YAML file"`
-}
-
-func (r *RunCommand) Execute(args []string) error {
-	_ = godotenv.Load()
-	ctx := context.Background()
-
-	spec, err := loadAgentSpec(r.File)
-	if err != nil {
-		return fmt.Errorf("[LOAD ERROR] %w", err)
-	}
-	registerAgents(spec)
-
-	if r.Mock != "" {
-		if err := loadMockResponses(r.Mock); err != nil {
+func ConfigureAI(ctx context.Context, mockfile string) error {
+	if mockfile != "" {
+		if err := loadMockResponses(mockfile); err != nil {
 			return fmt.Errorf("[MOCK ERROR] %w", err)
 		}
 	} else {
@@ -75,8 +57,20 @@ func (r *RunCommand) Execute(args []string) error {
 		config.OrgID = org
 		openaiClient = openai.NewClientWithConfig(config)
 	}
+	return nil
+}
 
-	res := CallAgent(ctx, r.Name, r.Input)
+func LoadSpec(specfile string) (*AgentSpec, error) {
+	spec, err := loadAgentSpec(specfile)
+	if err != nil {
+		return nil, fmt.Errorf("[LOAD ERROR] %w", err)
+	}
+	registerAgents(spec)
+	return &spec, nil
+}
+
+func (s *AgentSpec) Run(ctx context.Context, name string, input string) error {
+	res := CallAgent(ctx, name, input)
 	if res.Error != nil {
 		return fmt.Errorf("[AGENT ERROR] %v", res.Error)
 	}
@@ -87,14 +81,6 @@ func (r *RunCommand) Execute(args []string) error {
 	// fmt.Printf("[Agent: %s]\nOutput:\n%s\n", res.AgentName, res.Output)
 	fmt.Println(res.Output)
 	return nil
-}
-
-func main() {
-	parser := flags.NewParser(nil, flags.Default)
-	parser.AddCommand("run", "Run an agent", "Execute a named agent with input", &RunCommand{})
-	if _, err := parser.Parse(); err != nil {
-		log.Fatalf("[FATAL] CLI error: %v", err)
-	}
 }
 
 func loadAgentSpec(filename string) (AgentSpec, error) {
