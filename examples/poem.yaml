@@ -1,20 +1,22 @@
 agents:
-  - write_poem: |
-      Write a short rhyming poem about:
+  write_poem:
+      prompt: |
+        Write a short rhyming poem about:
 
-      {{ .Input }}
+        {{ .Input }}
 
-  - extract_theme: |
-      What is the central theme of the following poem?
+  extract_theme:
+      prompt: |
+        What is the central theme of the following poem?
 
-      {{ .Input }}
+        {{ .Input }}
 
-formatters:
-  - poem_analysis: |
-      {{ $poem := .Get "write_poem" }}
+  poem_analysis:
+      template: |
+        {{ $poem := .Get "write_poem" }}
 
-      Poem:
-      {{ $poem }}
+        Poem:
+        {{ $poem }}
 
-      Theme:
-      {{ .Get "extract_theme" $poem }}
+        Theme:
+        {{ .Get "extract_theme" $poem }}

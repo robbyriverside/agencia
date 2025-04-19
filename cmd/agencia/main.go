@@ -30,9 +30,9 @@ func (r *RunCommand) Execute(args []string) error {
 	_ = godotenv.Load()
 	ctx := context.Background()
 	agencia.ConfigureAI(ctx, r.Mock)
-	spec, err := agencia.LoadSpec(r.File)
+	_, err := agencia.Compile(r.File)
 	if err != nil {
 		return fmt.Errorf("[LOAD ERROR] %w", err)
 	}
-	return spec.Run(ctx, r.Name, r.Input)
+	return agencia.Run(ctx, r.Name, r.Input)
 }

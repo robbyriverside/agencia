@@ -1,11 +1,16 @@
-formatters:
-  - hello_user: |
+agents:
+  hello_user:
+    template: |
       Hello {{ .Input }}! How can I help you today?
 
-  - ask_mood: |
+  ask_mood:
+    template: |
       How are you feeling today, {{ .Input }}?
 
-  - intro_sequence: |
+  intro_sequence: 
+    template: |
+      Greeting:
       {{ .Get "hello_user" }}
 
+      Mood:
       {{ .Get "ask_mood" }}

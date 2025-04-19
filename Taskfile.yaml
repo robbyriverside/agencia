@@ -3,5 +3,6 @@ version: 3
 tasks:
   build:
     cmds:
-      - go build -o agencia cmd/agencia/main.go
+      - mkdir -p bin
+      - go build -o bin/agencia cmd/agencia/main.go
   
