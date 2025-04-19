@@ -34,17 +34,20 @@ Each agent is defined as a YAML entry, where the name of the agent maps directly
 
 ```yaml
 agents:
-  - greet_user: >-
+  - greet_user: |
       Hello {{ .Input }}, welcome to the system.
 
-  - repeat_input: >-
+  - repeat_input: |
       You said: > {{ .Input }}
 
-  - echo_summary: >-
+formatters:
+  - echo_summary: |
       {{ .Get "greet_user" }}
 
       {{ .Get "repeat_input" }}
 ```
+
+A formatter is a special kind of agent that does not generate a prompt. It simply applies the template and returns the result.  
 
 ### Key Concepts
 
