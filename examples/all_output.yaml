@@ -1,0 +1,95 @@
+annotated_yaml: |-
+    [called external markdown.ExtractFirstYamlBlock with input: World]
+
+    Explanation:
+
+    Explanation for World
+ask_mood: |
+    How are you feeling today, World?
+bilingual_report: |-
+    Original: World
+
+    Spanish: Traducción de World
+
+    Sentiment: Sentiment: positive
+explain_yaml: Explanation for World
+extract_theme: |
+    The central theme of the poem is world.
+extract_yaml_block: '[called external markdown.ExtractFirstYamlBlock with input: World]'
+get_issue: |
+    Issue: World
+    Please describe the issue in a few bullets.
+get_sentiment: 'Sentiment: positive'
+hello_user: |
+    Hello World! How can I help you today?
+interview_agent: |-
+    Summary for World
+
+    Questions about World
+intro_sequence: |-
+    Hello World! How can I help you today?
+
+
+    How are you feeling today, World?
+issue_summary: |
+    Summarize the issue below in one line:
+
+    World
+json_formatter: '[called external utils.JSONify with input: World]'
+poem_analysis: |-
+    Poem:
+    Here is a short rhyming poem about World:
+
+    Roses are red,
+    Violets are blue,
+    World is great,
+    And so are you!
+
+
+    Theme:
+    The central theme of the poem is here is a short rhyming poem about world:
+
+    roses are red,
+    violets are blue,
+    world is great,
+    and so are you!
+    .
+structured_log: |-
+    User description for World
+
+    [called external utils.JSONify with input: World]
+summarize_input: Summary for World
+support_flow: |-
+    Issue: World
+    Please describe the issue in a few bullets.
+
+
+    Based on the following summary, should we escalate this to a human agent?
+
+    Summarize the issue below in one line:
+
+    World
+
+    Respond with "Please escalate" or "No escalation required".
+
+    (Decision: No escalation required)
+translate_to_spanish: Traducción de World
+triage_decision: |
+    Based on the following summary, should we escalate this to a human agent?
+
+    Summarize the issue below in one line:
+
+    World
+
+    Respond with "Please escalate" or "No escalation required".
+
+    (Decision: No escalation required)
+turn_summary_into_questions: Questions about World
+user_description: User description for World
+write_poem: |
+    Here is a short rhyming poem about World:
+
+    Roses are red,
+    Violets are blue,
+    World is great,
+    And so are you!

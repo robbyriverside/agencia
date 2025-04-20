@@ -1,0 +1,69 @@
+responses:
+  hello_user: |
+    Hello {{ .Input }}! How can I help you today?
+  ask_mood: |
+    How are you feeling today, {{ .Input }}?
+  intro_sequence: |
+    Hello {{ .Input }}! How can I help you today?
+    
+    How are you feeling today, {{ .Input }}?
+  get_issue: |
+    Issue: {{ .Input }}
+    Please describe the issue in a few bullets.
+  issue_summary: |
+    Summarize the issue below in one line:
+    
+    {{ .Input }}
+  triage_decision: |
+    Based on the following summary, should we escalate this to a human agent?
+    
+    Summarize the issue below in one line:
+    
+    {{ .Input }}
+    
+    Respond with "Please escalate" or "No escalation required".
+    
+    (Decision: No escalation required)
+  support_flow: |
+    Issue: {{ .Input }}
+    Please describe the issue in a few bullets.
+    
+    Based on the following summary, should we escalate this to a human agent?
+    
+    Summarize the issue below in one line:
+    
+    {{ .Input }}
+    
+    Respond with "Please escalate" or "No escalation required".
+    
+    (Decision: No escalation required)
+  write_poem: |
+    Here is a short rhyming poem about {{ .Input }}:
+    
+    Roses are red,
+    Violets are blue,
+    {{ .Input }} is great,
+    And so are you!
+  extract_theme: |
+    The central theme of the poem is {{ .Input | lower }}.
+  poem_analysis: |
+    Here is a short rhyming poem about {{ .Input }}:
+    
+    Roses are red,
+    Violets are blue,
+    {{ .Input }} is great,
+    And so are you!
+    
+    The central theme of the poem is {{ .Input | lower }}.
+  issue_summary_mock: |
+    Summarize the issue below in one line:
+    
+    {{ .Input }}
+    
+    (Summary: {{ truncate .Input 30 }})
+  explain_yaml: "Explanation for {{ .Input }}"
+  get_sentiment: "Sentiment: positive"
+  translate_to_spanish: "Traducción de {{ .Input }}"
+  turn_summary_into_questions: "Questions about {{ .Input }}"
+  summarize_input: "Summary for {{ .Input }}"
+  user_description: "User description for {{ .Input }}"

@@ -62,8 +62,13 @@ func CallAgent(ctx context.Context, name string, input string) AgentResult {
 	if !ok {
 		return AgentResult{Ran: false, Error: fmt.Errorf("agent not found: %s", name), AgentName: name}
 	}
+
+	prompt := agent.Prompt
+	if agent.Template != "" {
+		prompt = agent.Template
+	}
 	// fmt.Printf("------ [Formatter: %s]\nPrompt:\n%s\n---\n", name, agent.Prompt)
-	tmpl, err := template.New(name).Parse(agent.Template)
+	tmpl, err := template.New(name).Parse(prompt)
 	if err != nil {
 		return AgentResult{Ran: false, Error: fmt.Errorf("template parse error: %w", err), AgentName: name}
 	}

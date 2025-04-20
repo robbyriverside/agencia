@@ -8,8 +8,8 @@ agents:
     prompt: |
       How are you feeling today, {{ .Input }}?
 
-formatters:
-  intro_sequence: |
+  intro_sequence:
+    template: |
       {{ .Get "hello_user" }}
 
       {{ .Get "ask_mood" }}
@@ -50,64 +50,72 @@ agents:
       {{ .Input }}
 
   extract_theme:
-      prompt: |
-        What is the central theme of the following poem?
+    prompt: |
+      What is the central theme of the following poem?
 
-        {{ .Input }}
+      {{ .Input }}
 
   poem_analysis:
-      template: |
-        {{ $poem := .Get "write_poem" }}
+    template: |
+      {{ $poem := .Get "write_poem" }}
 
-        Poem:
-        {{ $poem }}
+      Poem:
+      {{ $poem }}
 
-        Theme:
-        {{ .Get "extract_theme" $poem }}
+      Theme:
+      {{ .Get "extract_theme" $poem }}
 ---
 agents:
-  user_description: |
+  # structured logging
+  user_description:
+    prompt: |
       The user gave this input: {{ .Input }}
 
   json_formatter:
-      function: utils.JSONify
+    function: utils.JSONify
 
-formatters:
-  structured_log: |
+  structured_log:
+    template: |
       {{ .Get "user_description" }}
 
       {{ .Get "json_formatter" }}
 ---
 agents:
-  summarize_input: |
+  # interview
+  summarize_input:
+    prompt: |
       Summarize the text below in 3 bullet points:
 
       {{ .Input }}
 
-  turn_summary_into_questions: |
+  turn_summary_into_questions:
+    prompt: |
       Write 3 questions based on the following summary:
 
       {{ .Get "summarize_input" }}
 
-formatters:
-  interview_agent: |
+  interview_agent:
+    template: |
       {{ .Get "summarize_input" }}
 
       {{ .Get "turn_summary_into_questions" }}
 ---
 agents:
-  translate_to_spanish: |
+  # translation
+  translate_to_spanish:
+    prompt: |
       Translate the following to Spanish:
 
       {{ .Input }}
 
-  get_sentiment: |
+  get_sentiment:
+    prompt: |
       Analyze the sentiment of this sentence:
 
       {{ .Input }}
 
-formatters:
-  bilingual_report: |
+  bilingual_report:
+    template: |
       Original: {{ .Input }}
 
       Spanish: {{ .Get "translate_to_spanish" }}
@@ -115,16 +123,18 @@ formatters:
       Sentiment: {{ .Get "get_sentiment" }}
 ---
 agents:
+  # yaml
   extract_yaml_block:
-      function: markdown.ExtractFirstYamlBlock
+    function: markdown.ExtractFirstYamlBlock
 
-  explain_yaml: |
+  explain_yaml:
+    prompt: |
       Explain the meaning and purpose of the following YAML:
 
       {{ .Get "extract_yaml_block" }}
 
-formatters:
-  annotated_yaml: |
+  annotated_yaml:
+    template: |
       {{ .Get "extract_yaml_block" }}
 
       Explanation:

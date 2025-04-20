@@ -22,7 +22,7 @@ func Compile(specfile string) (*AgentSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("[LOAD ERROR] %w", err)
 	}
-	if err := registerAgents(spec); err != nil {
+	if err := RegisterAgents(spec); err != nil {
 		return nil, fmt.Errorf("[REGISTER ERROR] %w", err)
 	}
 	return &spec, nil
@@ -42,7 +42,7 @@ func loadAgentSpec(filename string) (AgentSpec, error) {
 	return spec, nil
 }
 
-func registerAgents(spec AgentSpec) error {
+func RegisterAgents(spec AgentSpec) error {
 	// fmt.Println("[INFO] Registering agents...", spec)
 	if spec.Agents != nil {
 		for name, agent := range spec.Agents {

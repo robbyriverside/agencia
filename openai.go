@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/sashabaranov/go-openai"
 	"gopkg.in/yaml.v3"
 )
@@ -48,13 +49,20 @@ func loadMockResponses(path string) error {
 		return fmt.Errorf("invalid YAML in mock file %s: %w", path, err)
 	}
 	for name, tmplStr := range mock.Responses {
-		tmpl, err := template.New(name).Parse(tmplStr)
+		tmpl, err := template.New(name).Funcs(sprig.FuncMap()).Funcs(template.FuncMap{"truncate": truncate}).Parse(tmplStr)
 		if err != nil {
 			return fmt.Errorf("error parsing mock template for %s: %w", name, err)
 		}
 		mockTemplates[name] = tmpl
 	}
 	return nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }
 
 func callAI(ctx context.Context, agentName, prompt string, input *TemplateContext) (string, error) {
@@ -70,6 +78,9 @@ func callAI(ctx context.Context, agentName, prompt string, input *TemplateContex
 }
 
 func callOpenAI(ctx context.Context, prompt string) (string, error) {
+	if openaiClient == nil {
+		return "[MOCK ERROR: attempted real OpenAI call in test/mock mode]", errors.New("openaiClient is nil; did you forget to mock?")
+	}
 	req := openai.ChatCompletionRequest{
 		Model: openai.GPT4,
 		Messages: []openai.ChatCompletionMessage{
