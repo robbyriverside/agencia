@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/robbyriverside/agencia"
+	"github.com/robbyriverside/agencia/agents"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/joho/godotenv"
@@ -14,9 +15,19 @@ import (
 func main() {
 	parser := flags.NewParser(nil, flags.Default)
 	parser.AddCommand("run", "Run an agent", "Execute a named agent with input", &RunCommand{})
+	parser.AddCommand("server", "Run the Agencia server", "Run the Agencia server", &ServerCommand{})
 	if _, err := parser.Parse(); err != nil {
 		log.Fatalf("[FATAL] CLI error: %v", err)
 	}
+}
+
+type ServerCommand struct{}
+
+func (s *ServerCommand) Execute(args []string) error {
+	_ = godotenv.Load()
+	ctx := context.Background()
+	agencia.Server(ctx, ":8080")
+	return nil
 }
 
 type RunCommand struct {
@@ -29,10 +40,10 @@ type RunCommand struct {
 func (r *RunCommand) Execute(args []string) error {
 	_ = godotenv.Load()
 	ctx := context.Background()
-	agencia.ConfigureAI(ctx, r.Mock)
-	_, err := agencia.Compile(r.File)
+	agents.ConfigureAI(ctx, r.Mock)
+	registry, err := agents.CompileFile(r.File)
 	if err != nil {
 		return fmt.Errorf("[LOAD ERROR] %w", err)
 	}
-	return agencia.Run(ctx, r.Name, r.Input)
+	return registry.RunPrint(ctx, r.Name, r.Input)
 }

@@ -1,8 +1,34 @@
+dotenv: ['.env']
 version: 3
 
 tasks:
   build:
+    desc: Build Agencia binary
+    silent: false
+    deps:
+      - build-web
     cmds:
       - mkdir -p bin
       - go build -o bin/agencia cmd/agencia/main.go
+
+  build-web:
+    desc: Build Flutter web app and copy to local web folder
+    cmds:
+      - |
+        if [ -n "$WEB_PROJECT" ]; then
+          echo "Building web from \$WEB_PROJECT"
+          cd "$WEB_PROJECT"
+          flutter build web
+          cd -
+          mkdir -p web
+          cp -r "$WEB_PROJECT/build/web/"* web/
+        else
+          if [ -f web/index.html ]; then
+            echo "Using existing web build in ./web"
+          else
+            echo "No WEB_PROJECT set and no existing ./web/index.html found"
+            exit 1
+          fi
+        fi
+    silent: false
   

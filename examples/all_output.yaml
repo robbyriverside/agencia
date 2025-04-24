@@ -1,5 +1,5 @@
 annotated_yaml: |-
-    [called external markdown.ExtractFirstYamlBlock with input: World]
+    extract yaml blocks function World
 
     Explanation:
 
@@ -15,7 +15,7 @@ bilingual_report: |-
 explain_yaml: Explanation for World
 extract_theme: |
     The central theme of the poem is world.
-extract_yaml_block: '[called external markdown.ExtractFirstYamlBlock with input: World]'
+extract_yaml_block: extract yaml blocks function World
 get_issue: |
     Issue: World
     Please describe the issue in a few bullets.
@@ -35,7 +35,7 @@ issue_summary: |
     Summarize the issue below in one line:
 
     World
-json_formatter: '[called external utils.JSONify with input: World]'
+json_formatter: json formatter function World
 poem_analysis: |-
     Poem:
     Here is a short rhyming poem about World:
@@ -57,7 +57,7 @@ poem_analysis: |-
 structured_log: |-
     User description for World
 
-    [called external utils.JSONify with input: World]
+    json formatter function World
 summarize_input: Summary for World
 support_flow: |-
     Issue: World

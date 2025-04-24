@@ -72,7 +72,7 @@ agents:
       The user gave this input: {{ .Input }}
 
   json_formatter:
-    function: utils.JSONify
+    template: "json formatter function {{ .Input }}"
 
   structured_log:
     template: |
@@ -125,7 +125,7 @@ agents:
 agents:
   # yaml
   extract_yaml_block:
-    function: markdown.ExtractFirstYamlBlock
+    template: "extract yaml blocks function {{ .Input }}"
 
   explain_yaml:
     prompt: |
