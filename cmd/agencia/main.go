@@ -21,12 +21,14 @@ func main() {
 	}
 }
 
-type ServerCommand struct{}
+type ServerCommand struct {
+	Addr string `short:"a" long:"addr" description:"Address to bind the server to" default:"0.0.0.0:8080"`
+}
 
 func (s *ServerCommand) Execute(args []string) error {
 	_ = godotenv.Load()
 	ctx := context.Background()
-	agencia.Server(ctx, ":8080")
+	agencia.Server(ctx, s.Addr)
 	return nil
 }
 
