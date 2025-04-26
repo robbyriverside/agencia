@@ -10,19 +10,20 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/robbyriverside/agencia"
 	"github.com/robbyriverside/agencia/agents"
 )
 
 // loadAllSpecs parses a multi-doc YAML file and returns a slice of AgentSpec
-func loadAllSpecs(filename string) ([]agents.AgentSpec, error) {
+func loadAllSpecs(filename string) ([]agencia.AgentSpec, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read file: %w", err)
 	}
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
-	var specs []agents.AgentSpec
+	var specs []agencia.AgentSpec
 	for {
-		var spec agents.AgentSpec
+		var spec agencia.AgentSpec
 		err := dec.Decode(&spec)
 		if err != nil {
 			if err.Error() == "EOF" {
@@ -36,9 +37,9 @@ func loadAllSpecs(filename string) ([]agents.AgentSpec, error) {
 }
 
 // captureSpecOutput is a reusable function that registers agents and runs each agent with a sample input
-func captureSpecOutput(ctx context.Context, spec agents.AgentSpec, input string) map[string]string {
+func captureSpecOutput(ctx context.Context, spec agencia.AgentSpec, input string) map[string]string {
 	outputs := make(map[string]string)
-	registry, err := agents.RegisterAgents(spec)
+	registry, err := agencia.RegisterAgents(spec)
 	if err != nil {
 		return nil
 	}

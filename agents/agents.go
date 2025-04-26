@@ -1,12 +1,16 @@
 package agents
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"text/template"
+
+	"github.com/robbyriverside/agencia/utils"
+	"github.com/sashabaranov/go-openai"
+	"gopkg.in/yaml.v2"
 )
 
 type AgentFn func(ctx context.Context, input map[string]any) (string, error)
@@ -17,99 +21,84 @@ type Agent struct {
 	InputPrompt map[string]string // field -> description
 	Prompt      string
 	Template    string
+	Alias       string
 	Function    AgentFn
+	Listeners   []string
 }
 
-type AgentResult struct {
-	Output    string
-	Ran       bool
-	Error     error
-	AgentName string
+var MockTemplates = map[string]*template.Template{}
+var openaiClient *openai.Client
+var openaiInitError error
+var openaiInitialized bool
+
+func getOpenAIClient() (*openai.Client, error) {
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	org := os.Getenv("OPENAI_ORG")
+	if apiKey == "" {
+		return nil, errors.New("OPENAI_API_KEY must be set")
+	}
+	config := openai.DefaultConfig(apiKey)
+	config.OrgID = org
+	openaiClient = openai.NewClientWithConfig(config)
+	return openaiClient, nil
 }
 
-func (r Registry) Run(ctx context.Context, name string, input string) string {
-	res := r.CallAgent(ctx, name, input)
-	if res.Error != nil {
-		return fmt.Sprintf("[AGENT ERROR] %v", res.Error)
+func loadMockResponses(path string) error {
+	type MockSpec struct {
+		Responses map[string]string `yaml:"responses"`
 	}
-	if !res.Ran {
-		return fmt.Sprintf("[INFO] Agent '%s' did not run (empty or skipped).", res.AgentName)
+	var mock MockSpec
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("cannot read mock file %s: %w", path, err)
 	}
-	return res.Output
-}
-
-func (r Registry) RunPrint(ctx context.Context, name string, input string) error {
-	res := r.CallAgent(ctx, name, input)
-	if res.Error != nil {
-		return fmt.Errorf("[AGENT ERROR] %v\n", res.Error)
+	err = yaml.Unmarshal(data, &mock)
+	if err != nil {
+		return fmt.Errorf("invalid YAML in mock file %s: %w", path, err)
 	}
-	if !res.Ran {
-		fmt.Printf("[INFO] Agent '%s' did not run (empty or skipped).\n", res.AgentName)
-		return nil
+	for name, tmplStr := range mock.Responses {
+		tmpl, err := utils.TemplateParse(name, tmplStr)
+		if err != nil {
+			return fmt.Errorf("error parsing mock template for %s: %w", name, err)
+		}
+		MockTemplates[name] = tmpl
 	}
-	// fmt.Printf("[Agent: %s]\nOutput:\n%s\n", res.AgentName, res.Output)
-	fmt.Println(res.Output)
 	return nil
 }
 
-type TemplateContext struct {
-	Input    string
-	Registry Registry
-	ctx      context.Context
+func ConfigureAI(ctx context.Context, mockfile string) error {
+	if mockfile != "" {
+		if err := loadMockResponses(mockfile); err != nil {
+			return fmt.Errorf("[MOCK ERROR] %w", err)
+		}
+	} else {
+		apiKey := os.Getenv("OPENAI_API_KEY")
+		org := os.Getenv("OPENAI_ORG")
+		if apiKey == "" {
+			return errors.New("OPENAI_API_KEY must be set")
+		}
+		config := openai.DefaultConfig(apiKey)
+		config.OrgID = org
+		openaiClient = openai.NewClientWithConfig(config)
+	}
+	return nil
 }
 
-func (t *TemplateContext) Get(name string, optionalInput ...string) string {
-	input := t.Input
-	if len(optionalInput) > 0 {
-		input = optionalInput[0]
-	}
-	res := t.Registry.CallAgent(t.ctx, name, input)
-	if res.Error != nil {
-		return fmt.Sprintf("[error calling %s: %v]", name, res.Error)
-	}
-	return res.Output
-}
-
-func (r Registry) CallAgent(ctx context.Context, name string, input string) AgentResult {
-	agent, ok := r[name]
-	if !ok {
-		return AgentResult{Ran: false, Error: fmt.Errorf("agent not found: %s", name), AgentName: name}
-	}
-
-	prompt := agent.Prompt
-	if agent.Template != "" {
-		prompt = agent.Template
-	}
-	// fmt.Printf("------ [Formatter: %s]\nPrompt:\n%s\n---\n", name, agent.Prompt)
-	tmpl, err := template.New(name).Parse(prompt)
+func CallOpenAI(ctx context.Context, prompt string) (string, error) {
+	client, err := getOpenAIClient()
 	if err != nil {
-		return AgentResult{Ran: false, Error: fmt.Errorf("template parse error: %w", err), AgentName: name}
+		return "[MOCK ERROR: attempted real OpenAI call in test/mock mode]", err
 	}
-	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, &TemplateContext{Input: input, ctx: ctx, Registry: r})
+	req := openai.ChatCompletionRequest{
+		Model: openai.GPT4,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleUser, Content: prompt},
+		},
+	}
+	resp, err := client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return AgentResult{Ran: false, Error: fmt.Errorf("template exec error: %w", err), AgentName: name}
+		return "", fmt.Errorf("OpenAI API error: %w", err)
 	}
-	finalPrompt := strings.TrimSpace(buf.String())
-	// fmt.Printf("------ [Formatter: %s]\nPrompt:\n%s\n---\n", name, finalPrompt)
-
-	if agent.Template != "" {
-		return AgentResult{Output: finalPrompt, Ran: true, AgentName: name}
-	} else if agent.Function != nil {
-		return AgentResult{
-			Output:    fmt.Sprintf("[called external %s with input: %s]", name, input),
-			Ran:       true,
-			AgentName: name,
-		}
-	} else if agent.Prompt != "" {
-		if finalPrompt == "" {
-			return AgentResult{Ran: false, Output: "", AgentName: name}
-		}
-		resp, err := callAI(ctx, name, finalPrompt, &TemplateContext{Input: input, ctx: ctx, Registry: r})
-		if err != nil {
-			return AgentResult{Ran: true, Error: err, AgentName: name}
-		}
-		return AgentResult{Output: resp, Ran: true, AgentName: name}
-	}
-	return AgentResult{Ran: false, Error: errors.New("no prompt or function"), AgentName: name}
+	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 }

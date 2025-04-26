@@ -1,18 +1,35 @@
-package agents
+// package agencia
+// agencia is a package for building and running agent-based applications
+// package management:
+//
+//	 To avoid package loops:
+//		   agencia uses the libraries in agencia/lib
+//		   agencia and agencia/lib sub packages use the agents in agencia/agents
+//
+// agencia management: agencia
+// agent management:   agencia/agents
+// libraries:          agencia/lib
+package agencia
 
 import (
 	"errors"
 	"fmt"
 	"os"
 
+	"github.com/robbyriverside/agencia/agents"
 	"gopkg.in/yaml.v3"
 )
 
 type AgentSpec struct {
-	Agents map[string]Agent `yaml:"agents,omitempty"`
+	Agents map[string]agents.Agent `yaml:"agents,omitempty"`
 }
 
-type Registry map[string]Agent
+type AgentResult struct {
+	Output    string
+	Ran       bool
+	Error     error
+	AgentName string
+}
 
 func (s *AgentSpec) String() string {
 	b, _ := yaml.Marshal(s)
@@ -64,11 +81,11 @@ func loadAgentSpec(specbytes []byte) (AgentSpec, error) {
 
 func RegisterAgents(spec AgentSpec) (Registry, error) {
 	// fmt.Println("[INFO] Registering agents...", spec)
-	registry := map[string]Agent{}
+	registry := Registry{}
 	if spec.Agents != nil {
 		for name, agent := range spec.Agents {
 			agent.Name = name
-			registry[name] = agent
+			registry[name] = &agent
 			if (agent.Function != nil && agent.Template != "") || (agent.Function != nil && agent.Prompt != "") || (agent.Template != "" && agent.Prompt != "") {
 				return nil, fmt.Errorf("agent '%s' has more than one of Function, Template, and Prompt set", name)
 			}

@@ -43,7 +43,7 @@ func (r *RunCommand) Execute(args []string) error {
 	_ = godotenv.Load()
 	ctx := context.Background()
 	agents.ConfigureAI(ctx, r.Mock)
-	registry, err := agents.CompileFile(r.File)
+	registry, err := agencia.CompileFile(r.File)
 	if err != nil {
 		return fmt.Errorf("[LOAD ERROR] %w", err)
 	}

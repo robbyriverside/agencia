@@ -12,7 +12,30 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-var RAGAgents = map[string]agents.Agent{
+var (
+	openaiClient      *openai.Client
+	openaiInitError   error
+	openaiInitialized bool
+)
+
+func getOpenAIClient() (*openai.Client, error) {
+	if openaiInitialized {
+		return openaiClient, openaiInitError
+	}
+	openaiInitialized = true
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		openaiInitError = fmt.Errorf("OPENAI_API_KEY environment variable is not set")
+		return nil, openaiInitError
+	}
+
+	client := openai.NewClient(apiKey)
+	openaiClient = client
+	return client, nil
+}
+
+var Agents = map[string]*agents.Agent{
 	"search": {
 		Description: "Search the knowledge base for relevant passages.",
 		InputPrompt: map[string]string{
@@ -37,28 +60,53 @@ var RAGAgents = map[string]agents.Agent{
 		},
 		Function: ExtractFacts,
 	},
+
+	"show_inputs": {
+		Description: "Return the inputs to the agent.",
+		Function: func(ctx context.Context, input map[string]any) (string, error) {
+			return fmt.Sprintf("Inputs: %v", input), nil
+		},
+	},
 }
 
-// Assumes QDrant client and embedder are set up globally
 var (
-	qdrantClient *qdrant.Client
-	openaiClient *openai.Client
+	qdrantClient      *qdrant.Client
+	qdrantInitError   error
+	qdrantInitialized bool
 )
 
-func init() {
+func getQdrantClient(ctx context.Context) (*qdrant.Client, error) {
+	if qdrantInitialized {
+		return qdrantClient, qdrantInitError
+	}
+	qdrantInitialized = true
 
 	client, err := qdrant.NewClient(&qdrant.Config{
 		Host: "localhost",
 		Port: 6334,
 	})
 	if err != nil {
-		panic("failed to connect to Qdrant: " + err.Error())
+		qdrantInitError = fmt.Errorf("failed to create Qdrant client: %w", err)
+		return nil, qdrantInitError
 	}
+
+	_, err = client.ListCollections(ctx)
+	if err != nil {
+		qdrantInitError = fmt.Errorf("cannot connect to Qdrant server at localhost:6334: %w", err)
+		return nil, qdrantInitError
+	}
+
 	qdrantClient = client
+	return client, nil
 }
 
 func createCollection(name string) {
-	qdrantClient.CreateCollection(context.Background(), &qdrant.CreateCollection{
+	client, err := getQdrantClient(context.Background())
+	if err != nil {
+		fmt.Println("[RAG] Error:", err)
+		return
+	}
+	client.CreateCollection(context.Background(), &qdrant.CreateCollection{
 		CollectionName: name,
 		VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
 			Size:     4,
@@ -68,8 +116,12 @@ func createCollection(name string) {
 }
 
 func upsertVectors(name string, vec []float32) (*qdrant.UpdateResult, error) {
+	client, err := getQdrantClient(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
-	operationInfo, err := qdrantClient.Upsert(context.Background(), &qdrant.UpsertPoints{
+	operationInfo, err := client.Upsert(context.Background(), &qdrant.UpsertPoints{
 		CollectionName: name,
 		Points: []*qdrant.PointStruct{
 			{
@@ -96,8 +148,12 @@ func upsertVectors(name string, vec []float32) (*qdrant.UpdateResult, error) {
 }
 
 func createFullIndex(collection string) (*qdrant.UpdateResult, error) {
+	client, err := getQdrantClient(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
-	result, err := qdrantClient.CreateFieldIndex(context.Background(), &qdrant.CreateFieldIndexCollection{
+	result, err := client.CreateFieldIndex(context.Background(), &qdrant.CreateFieldIndexCollection{
 		CollectionName: collection,
 		FieldName:      "text",
 		FieldType:      qdrant.FieldType_FieldTypeText.Enum(),
@@ -116,8 +172,12 @@ func createFullIndex(collection string) (*qdrant.UpdateResult, error) {
 }
 
 func createIndex(collection, field string) (*qdrant.UpdateResult, error) {
+	client, err := getQdrantClient(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
-	results, err := qdrantClient.CreateFieldIndex(context.Background(), &qdrant.CreateFieldIndexCollection{
+	results, err := client.CreateFieldIndex(context.Background(), &qdrant.CreateFieldIndexCollection{
 		CollectionName: collection,
 		FieldName:      field,
 		FieldType:      qdrant.FieldType_FieldTypeKeyword.Enum(),
@@ -129,7 +189,12 @@ func createIndex(collection, field string) (*qdrant.UpdateResult, error) {
 }
 
 func filterQuery(name string, vec []float32, filter map[string]string) ([]*qdrant.ScoredPoint, error) {
-	searchResult, err := qdrantClient.Query(context.Background(), &qdrant.QueryPoints{
+	client, err := getQdrantClient(context.Background())
+	if err != nil {
+		panic("failed to get Qdrant client: " + err.Error())
+	}
+
+	searchResult, err := client.Query(context.Background(), &qdrant.QueryPoints{
 		CollectionName: name,
 		Query:          qdrant.NewQuery(vec...),
 		Filter: &qdrant.Filter{
@@ -146,9 +211,14 @@ func filterQuery(name string, vec []float32, filter map[string]string) ([]*qdran
 }
 
 func query(name string, vec []float32, limit uint64) ([]*qdrant.ScoredPoint, error) {
+	client, err := getQdrantClient(context.Background())
+	if err != nil {
+		panic("failed to get Qdrant client: " + err.Error())
+	}
+
 	max := new(uint64)
 	*max = limit
-	searchResult, err := qdrantClient.Query(context.Background(), &qdrant.QueryPoints{
+	searchResult, err := client.Query(context.Background(), &qdrant.QueryPoints{
 		CollectionName: name,
 		Query:          qdrant.NewQuery(vec...),
 		Limit:          max,
@@ -160,7 +230,11 @@ func query(name string, vec []float32, limit uint64) ([]*qdrant.ScoredPoint, err
 }
 
 func embedText(ctx context.Context, text string) ([]float32, error) {
-	embedding, err := openaiClient.CreateEmbeddings(ctx, openai.EmbeddingRequest{
+	client, err := getOpenAIClient()
+	if err != nil {
+		return nil, err
+	}
+	embedding, err := client.CreateEmbeddings(ctx, openai.EmbeddingRequest{
 		Input: []string{text},
 		Model: openai.AdaEmbeddingV2,
 	})

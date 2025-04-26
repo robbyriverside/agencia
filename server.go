@@ -9,8 +9,6 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-
-	"github.com/robbyriverside/agencia/agents"
 )
 
 //go:embed web/*
@@ -28,10 +26,6 @@ type runResponse struct {
 }
 
 func Server(ctx context.Context, url string) {
-	if err := agents.ConfigureAI(ctx, ""); err != nil {
-		log.Fatalf("Failed to configure AI: %v", err)
-	}
-
 	webFS, err := fs.Sub(embeddedFiles, "web")
 	if err != nil {
 		log.Fatalf("Failed to locate embedded web directory: %v", err)
@@ -67,7 +61,7 @@ func handleRun(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.Background()
 
-	registry, err := agents.Compile(req.Spec)
+	registry, err := Compile(req.Spec)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("[LOAD ERROR] %s", err), http.StatusBadRequest)
 		return
