@@ -36,7 +36,7 @@ func (s *AgentSpec) String() string {
 	return string(b)
 }
 
-func CompileFile(specfile string) (Registry, error) {
+func LoadRegistry(specfile string) (Registry, error) {
 	spec, err := loadAgentSpecFile(specfile)
 	if err != nil {
 		return nil, fmt.Errorf("[LOAD ERROR] %w", err)
@@ -48,7 +48,7 @@ func CompileFile(specfile string) (Registry, error) {
 	return registry, nil
 }
 
-func Compile(spec string) (Registry, error) {
+func NewRegistry(spec string) (Registry, error) {
 	specBytes := []byte(spec)
 	agentSpec, err := loadAgentSpec(specBytes)
 	if err != nil {

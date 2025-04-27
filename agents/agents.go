@@ -31,7 +31,7 @@ var openaiClient *openai.Client
 var openaiInitError error
 var openaiInitialized bool
 
-func getOpenAIClient() (*openai.Client, error) {
+func GetOpenAIClient() (*openai.Client, error) {
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	org := os.Getenv("OPENAI_ORG")
@@ -86,7 +86,7 @@ func ConfigureAI(ctx context.Context, mockfile string) error {
 }
 
 func CallOpenAI(ctx context.Context, prompt string) (string, error) {
-	client, err := getOpenAIClient()
+	client, err := GetOpenAIClient()
 	if err != nil {
 		return "[MOCK ERROR: attempted real OpenAI call in test/mock mode]", err
 	}

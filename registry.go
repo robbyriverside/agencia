@@ -10,6 +10,7 @@ import (
 
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/robbyriverside/agencia/lib/rag"
+	"github.com/robbyriverside/agencia/logs"
 	"github.com/robbyriverside/agencia/utils"
 	"gopkg.in/yaml.v3"
 )
@@ -48,10 +49,12 @@ func (r *Registry) LookupAgent(name string) (*agents.Agent, error) {
 func (r *Registry) Run(ctx context.Context, name string, input string) string {
 	res := r.CallAgent(ctx, name, input)
 	if res.Error != nil {
-		return fmt.Sprintf("[AGENT ERROR] %v", res.Error)
+		logs.Error("[AGENT ERROR] %v", res.Error)
+		return ""
 	}
 	if !res.Ran {
-		return fmt.Sprintf("[INFO] Agent '%s' did not run (empty or skipped).", res.AgentName)
+		logs.Info("[INFO] Agent '%s' did not run (skipped).", res.AgentName)
+		return ""
 	}
 	out := res.Output
 	if !utf8.ValidString(out) {
@@ -66,7 +69,7 @@ func (r *Registry) RunPrint(ctx context.Context, name string, input string) erro
 		return fmt.Errorf("[AGENT ERROR] %v", res.Error)
 	}
 	if !res.Ran {
-		fmt.Printf("[INFO] Agent '%s' did not run (empty or skipped).\n", res.AgentName)
+		fmt.Printf("[INFO] Agent '%s' did not run (skipped).\n", res.AgentName)
 		return nil
 	}
 	out := res.Output

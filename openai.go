@@ -42,11 +42,10 @@ func (r *Registry) CallAI(ctx context.Context, agent *agents.Agent, prompt strin
 	return r.CallOpenAI(ctx, agent, prompt)
 }
 
-var openaiClient *openai.Client
-
 func (r *Registry) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
-	if openaiClient == nil {
-		return "[MOCK ERROR: attempted real OpenAI call in test/mock mode]", errors.New("openaiClient is nil; did you forget to mock?")
+	client, err := agents.GetOpenAIClient()
+	if err != nil {
+		return "", err
 	}
 	tools := []openai.Tool{}
 	for _, listenerName := range agent.Listeners {
@@ -70,12 +69,10 @@ func (r *Registry) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt s
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleUser, Content: prompt},
 		},
-		Tools: tools,
-		ToolChoice: openai.ToolChoice{
-			Type: "auto",
-		},
+		Tools:      tools,
+		ToolChoice: nil,
 	}
-	resp, err := openaiClient.CreateChatCompletion(ctx, req)
+	resp, err := client.CreateChatCompletion(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("OpenAI API error: %w", err)
 	}
@@ -146,12 +143,14 @@ func (r *Registry) handleToolCalls(ctx context.Context, prompt string, tools []o
 		Model:    openai.GPT4,
 		Messages: messages,
 		Tools:    tools,
-		ToolChoice: openai.ToolChoice{
-			Type: "auto",
-		},
 	}
 
-	contResp, err := openaiClient.CreateChatCompletion(ctx, contReq)
+	client, err := agents.GetOpenAIClient()
+	if err != nil {
+		return "", err
+	}
+
+	contResp, err := client.CreateChatCompletion(ctx, contReq)
 	if err != nil {
 		return "", fmt.Errorf("OpenAI API error on continuation: %w", err)
 	}

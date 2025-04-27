@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log"
+	"os"
 
 	"github.com/robbyriverside/agencia"
 	"github.com/robbyriverside/agencia/agents"
+	"github.com/robbyriverside/agencia/logs"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/joho/godotenv"
@@ -27,6 +29,7 @@ type ServerCommand struct {
 
 func (s *ServerCommand) Execute(args []string) error {
 	_ = godotenv.Load()
+	logs.InitLogger(os.Getenv("ENV"))
 	ctx := context.Background()
 	agencia.Server(ctx, s.Addr)
 	return nil
@@ -41,11 +44,17 @@ type RunCommand struct {
 
 func (r *RunCommand) Execute(args []string) error {
 	_ = godotenv.Load()
+	logs.InitLogger(os.Getenv("ENV"))
 	ctx := context.Background()
 	agents.ConfigureAI(ctx, r.Mock)
-	registry, err := agencia.CompileFile(r.File)
+	registry, err := agencia.LoadRegistry(r.File)
 	if err != nil {
-		return fmt.Errorf("[LOAD ERROR] %w", err)
+		logs.Error(err)
+		return errors.New("run command failed")
 	}
-	return registry.RunPrint(ctx, r.Name, r.Input)
+	if err := registry.RunPrint(ctx, r.Name, r.Input); err != nil {
+		logs.Error(err)
+		return errors.New("run command failed")
+	}
+	return nil
 }
