@@ -15,6 +15,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type AgentNotFoundError struct {
+	AgentName string
+}
+
+func (e *AgentNotFoundError) Error() string {
+	return fmt.Sprintf("could not find agent: %s", e.AgentName)
+}
+
 type Libraries map[string]Registry
 
 type Registry map[string]*agents.Agent
@@ -28,7 +36,7 @@ func (r *Registry) LookupAgent(name string) (*agents.Agent, error) {
 	if !strings.Contains(name, ".") {
 		agent, ok := (*r)[name]
 		if !ok {
-			return nil, fmt.Errorf("agent not found in working package: %s", name)
+			return nil, &AgentNotFoundError{AgentName: name}
 		}
 		return agent, nil
 	}
@@ -37,13 +45,17 @@ func (r *Registry) LookupAgent(name string) (*agents.Agent, error) {
 	pkgName, agentName := parts[0], parts[1]
 	pkg, ok := libraries[pkgName]
 	if !ok {
-		return nil, fmt.Errorf("unknown package: %s", pkgName)
+		return nil, &AgentNotFoundError{AgentName: name}
 	}
 	agent, ok := pkg[agentName]
 	if !ok {
-		return nil, fmt.Errorf("agent %s not found in package %s", name, pkgName)
+		return nil, &AgentNotFoundError{AgentName: name}
 	}
 	return agent, nil
+}
+
+func (r *Registry) RegisterAgent(agent *agents.Agent) {
+	(*r)[agent.Name] = agent
 }
 
 func (r *Registry) Run(ctx context.Context, name string, input string) string {

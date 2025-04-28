@@ -54,18 +54,19 @@ func (r *Registry) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt s
 			return "", fmt.Errorf("error looking up listener agent %s: %w", listenerName, err)
 		}
 		if listenerAgent.Description != "" {
+			paramSchema := buildToolParameters(listenerAgent)
 			tools = append(tools, openai.Tool{
 				Type: openai.ToolTypeFunction,
 				Function: &openai.FunctionDefinition{
 					Name:        listenerName,
 					Description: listenerAgent.Description,
-					Parameters:  map[string]interface{}{},
+					Parameters:  paramSchema,
 				},
 			})
 		}
 	}
 	req := openai.ChatCompletionRequest{
-		Model: openai.GPT4,
+		Model: openai.GPT4o,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleUser, Content: prompt},
 		},
@@ -124,15 +125,19 @@ func (r *Registry) handleToolCalls(ctx context.Context, prompt string, tools []o
 					return "", fmt.Errorf("error executing template output from agent %s: %w", agentName, err)
 				}
 				functionResults = append(functionResults, openai.ChatCompletionMessage{
-					Role:    openai.ChatMessageRoleFunction,
-					Name:    agentName,
-					Content: buf.String(),
+					Role:       openai.ChatMessageRoleTool,
+					ToolCallID: toolCall.ID,
+					Content:    buf.String(),
 				})
 			} else {
+				outputContent := res.Output
+				if outputContent == "" {
+					outputContent = " " // must be a non-nil string to satisfy OpenAI API
+				}
 				functionResults = append(functionResults, openai.ChatCompletionMessage{
-					Role:    openai.ChatMessageRoleFunction,
-					Name:    agentName,
-					Content: res.Output,
+					Role:       openai.ChatMessageRoleTool,
+					ToolCallID: toolCall.ID,
+					Content:    outputContent,
 				})
 			}
 		}
@@ -140,7 +145,7 @@ func (r *Registry) handleToolCalls(ctx context.Context, prompt string, tools []o
 	messages = append(messages, functionResults...)
 
 	contReq := openai.ChatCompletionRequest{
-		Model:    openai.GPT4,
+		Model:    openai.GPT4o,
 		Messages: messages,
 		Tools:    tools,
 	}
@@ -158,10 +163,46 @@ func (r *Registry) handleToolCalls(ctx context.Context, prompt string, tools []o
 	if len(contResp.Choices) > 0 {
 		choice := contResp.Choices[0]
 		if len(choice.Message.ToolCalls) > 0 {
+			if depth+1 > 5 {
+				return "", fmt.Errorf(
+					"too many recursive tool call levels (depth=%d); possible infinite loop.\nTrace:\n%s",
+					depth+1,
+					strings.Join(trace, "\n"),
+				)
+			}
 			// Recursive: new tool calls need handling
 			return r.handleToolCalls(ctx, prompt, tools, choice.Message.ToolCalls, depth+1, trace)
 		}
 		return strings.TrimSpace(choice.Message.Content), nil
 	}
 	return "", errors.New("no choices returned from continuation OpenAI call")
+}
+
+func buildToolParameters(agent *agents.Agent) map[string]interface{} {
+	paramSchema := map[string]interface{}{
+		"type":       "object",
+		"properties": map[string]interface{}{},
+		"required":   []string{},
+	}
+
+	for fieldName, arg := range agent.InputPrompt {
+		properties := paramSchema["properties"].(map[string]interface{})
+		argType := arg.Type
+		if argType == "" {
+			argType = "string"
+		}
+		properties[fieldName] = map[string]interface{}{
+			"type":        argType,
+			"description": arg.Description,
+		}
+		isRequired := true
+		if !arg.Required {
+			isRequired = false
+		}
+		if isRequired {
+			paramSchema["required"] = append(paramSchema["required"].([]string), fieldName)
+		}
+	}
+
+	return paramSchema
 }

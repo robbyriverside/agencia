@@ -38,25 +38,41 @@ func getOpenAIClient() (*openai.Client, error) {
 var Agents = map[string]*agents.Agent{
 	"search": {
 		Description: "Search the knowledge base for relevant passages.",
-		InputPrompt: map[string]string{
-			"query": "What are you looking for?",
-			"limit": "Max number of results to return.",
+		InputPrompt: map[string]agents.Argument{
+			"query": {
+				Description: "What are you looking for?",
+				Type:        "string",
+				Required:    true,
+			},
+			"limit": {
+				Description: "Max number of results to return.",
+				Type:        "string",
+				Required:    true,
+			},
 		},
 		Function: Search,
 	},
 
 	"answer_with_sources": {
 		Description: "Return an answer with cited source excerpts.",
-		InputPrompt: map[string]string{
-			"question": "What do you want to know?",
+		InputPrompt: map[string]agents.Argument{
+			"question": {
+				Description: "What do you want to know?",
+				Type:        "string",
+				Required:    true,
+			},
 		},
 		Function: AnswerWithSources,
 	},
 
 	"extract_facts": {
 		Description: "Return bullet-pointed facts from the most relevant documents.",
-		InputPrompt: map[string]string{
-			"query": "What information are you trying to gather?",
+		InputPrompt: map[string]agents.Argument{
+			"query": {
+				Description: "What information are you trying to gather?",
+				Type:        "string",
+				Required:    true,
+			},
 		},
 		Function: ExtractFacts,
 	},

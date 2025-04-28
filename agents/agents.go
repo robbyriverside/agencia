@@ -13,12 +13,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type Argument struct {
+	Type        string `yaml:"type"`
+	Required    bool   `yaml:"required"`
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+}
+
 type AgentFn func(ctx context.Context, input map[string]any) (string, error)
 
 type Agent struct {
 	Name        string
 	Description string
-	InputPrompt map[string]string // field -> description
+	InputPrompt map[string]Argument // field name -> Argument details
 	Prompt      string
 	Template    string
 	Alias       string
@@ -91,7 +98,7 @@ func CallOpenAI(ctx context.Context, prompt string) (string, error) {
 		return "[MOCK ERROR: attempted real OpenAI call in test/mock mode]", err
 	}
 	req := openai.ChatCompletionRequest{
-		Model: openai.GPT4,
+		Model: openai.GPT4o,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleUser, Content: prompt},
 		},
