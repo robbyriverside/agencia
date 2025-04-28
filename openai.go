@@ -48,23 +48,31 @@ func (r *Registry) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt s
 		return "", err
 	}
 	tools := []openai.Tool{}
+	badListeners := []string{}
 	for _, listenerName := range agent.Listeners {
 		listenerAgent, err := r.LookupAgent(listenerName)
 		if err != nil {
 			return "", fmt.Errorf("error looking up listener agent %s: %w", listenerName, err)
 		}
-		if listenerAgent.Description != "" {
-			paramSchema := buildToolParameters(listenerAgent)
-			tools = append(tools, openai.Tool{
-				Type: openai.ToolTypeFunction,
-				Function: &openai.FunctionDefinition{
-					Name:        listenerName,
-					Description: listenerAgent.Description,
-					Parameters:  paramSchema,
-				},
-			})
+		if listenerAgent.Description == "" || len(listenerAgent.InputPrompt) == 0 {
+			badListeners = append(badListeners, listenerName)
+			continue
 		}
+		paramSchema := buildToolParameters(listenerAgent)
+		tools = append(tools, openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        listenerName,
+				Description: listenerAgent.Description,
+				Parameters:  paramSchema,
+			},
+		})
 	}
+
+	if len(badListeners) > 0 {
+		return "", fmt.Errorf("invalid listeners detected (missing description or input prompt): %s", strings.Join(badListeners, ", "))
+	}
+
 	req := openai.ChatCompletionRequest{
 		Model: openai.GPT4o,
 		Messages: []openai.ChatCompletionMessage{

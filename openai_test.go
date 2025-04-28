@@ -296,3 +296,57 @@ func TestCallOpenAI_AgentTemplateFails(t *testing.T) {
 	assert.Error(t, res.Error, "should error due to template execution failure")
 	assert.Contains(t, res.Error.Error(), "template", "error should mention template execution")
 }
+
+func TestCallOpenAI_MultipleBadListeners(t *testing.T) {
+	_ = godotenv.Load()
+
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
+	}
+
+	reg := &Registry{}
+	ctx := context.Background()
+
+	// Bad listener 1 (missing Description)
+	reg.RegisterAgent(&agents.Agent{
+		Name: "badtool1",
+		InputPrompt: map[string]agents.Argument{
+			"input": {
+				Description: "An input.",
+			},
+		},
+	})
+
+	// Bad listener 2 (missing InputPrompt)
+	reg.RegisterAgent(&agents.Agent{
+		Name:        "badtool2",
+		Description: "Bad tool without input prompt.",
+	})
+
+	// Good listener (correct agent)
+	reg.RegisterAgent(&agents.Agent{
+		Name:        "goodtool",
+		Description: "Good tool for testing.",
+		InputPrompt: map[string]agents.Argument{
+			"input": {
+				Description: "Good input.",
+			},
+		},
+		Template: "Good: {{ .Input }}",
+	})
+
+	// Main tryme agent
+	reg.RegisterAgent(&agents.Agent{
+		Name:      "tryme",
+		Prompt:    "Try calling multiple tools: {{ .Input }}.",
+		Listeners: []string{"badtool1", "badtool2", "goodtool"},
+	})
+
+	res := reg.CallAgent(ctx, "tryme", "testing bad listeners")
+	fmt.Printf("***Error: %s\n", res.Error)
+
+	assert.Error(t, res.Error, "should error due to multiple invalid listeners")
+	assert.Contains(t, res.Error.Error(), "badtool1", "should mention badtool1")
+	assert.Contains(t, res.Error.Error(), "badtool2", "should mention badtool2")
+	assert.NotContains(t, res.Error.Error(), "goodtool", "should not mention goodtool")
+}
