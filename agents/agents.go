@@ -22,6 +22,13 @@ type Argument struct {
 
 type AgentFn func(ctx context.Context, input map[string]any) (string, error)
 
+type Fact struct {
+	Name        string
+	Description string
+	Scope       string
+	Type        string
+}
+
 type Agent struct {
 	Name        string
 	Description string
@@ -31,15 +38,17 @@ type Agent struct {
 	Alias       string
 	Function    AgentFn
 	Listeners   []string
+	Facts       []Fact
+	Procedure   []string
 }
 
 var MockTemplates = map[string]*template.Template{}
 var openaiClient *openai.Client
-var openaiInitError error
-var openaiInitialized bool
+
+// var openaiInitError error
+// var openaiInitialized bool
 
 func GetOpenAIClient() (*openai.Client, error) {
-
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	org := os.Getenv("OPENAI_ORG")
 	if apiKey == "" {

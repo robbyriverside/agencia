@@ -1,6 +1,6 @@
 # Function Calling Test Plan
-
-This document outlines additional tests for validating OpenAI function-calling behavior inside the Agencia project.
+TestCallOpenAI_ContinuationMissingTool
+TestCallOpenAI_AgentTemplateFails
 
 ---
 
