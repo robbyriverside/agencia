@@ -27,6 +27,7 @@ type Fact struct {
 	Description string
 	Scope       string
 	Type        string
+	Tags        []string
 }
 
 type Agent struct {
