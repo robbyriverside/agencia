@@ -58,11 +58,6 @@ func NewRegistry(spec string) (*Registry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("[REGISTER ERROR] %w", err)
 	}
-	for name, agent := range registry.Agents {
-		if len(agent.Facts) > 0 {
-			fmt.Printf("Agent '%s' has facts: %+v\n", name, agent.Facts)
-		}
-	}
 	return registry, nil
 }
 

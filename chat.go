@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"encoding/json"
 
@@ -42,12 +41,6 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		Spec  string `json:"spec"` // optionally store or use this
 	}
 
-	const (
-		writeWait  = 10 * time.Second
-		pongWait   = 60 * time.Second
-		pingPeriod = (pongWait * 9) / 10
-	)
-
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -71,7 +64,7 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to decode chat init request: %v", err)
 		return
 	}
-	log.Println("Spec received:\n", initReq.Spec)
+	// log.Println("Spec received:\n", initReq.Spec)
 
 	if defaultChat == nil {
 		defaultChat = NewChat(initReq.Agent)
@@ -86,42 +79,16 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defaultChat.Registry = registry
 
-	done := make(chan struct{})
-
-	conn.SetReadLimit(512)
-	conn.SetReadDeadline(time.Now().Add(pongWait))
-	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
-
-	ticker := time.NewTicker(pingPeriod)
-	defer ticker.Stop()
-
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				conn.SetWriteDeadline(time.Now().Add(writeWait))
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-					log.Println("WebSocket ping error:", err)
-					return
-				}
-			case <-done:
-				return
-			}
-		}
-	}()
-
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("WebSocket read error:", err)
-			close(done)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+				log.Println("Unexpected WebSocket error:", err)
+			}
 			break
 		}
 
-		fmt.Printf("Received message for agent '%s': %s\n", defaultChat.Agent, msg)
+		// fmt.Printf("Received message for agent '%s': %s\n", defaultChat.Agent, msg)
 
 		// Optionally echo the message back
 		input := string(msg)
@@ -133,7 +100,6 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 			defaultChat.ProcessAgentMemory(ctx, defaultChat.Registry, agent, input, resp)
 		}
 
-		conn.SetWriteDeadline(time.Now().Add(writeWait))
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(resp)); err != nil {
 			log.Println("WebSocket write error:", err)
 			conn.Close()
@@ -162,7 +128,7 @@ func (c *Chat) ProcessAgentMemory(ctx context.Context, r RegistryCaller, agent *
 		if arg.Description == "" {
 			log.Printf("[FACTS] Warning: fact '%s' has no description", k)
 		} else {
-			log.Printf("[FACTS] Preparing to extract: %s = %s (type: %s)", k, arg.Description, typ)
+			// log.Printf("[FACTS] Preparing to extract: %s = %s (type: %s)", k, arg.Description, typ)
 		}
 		prompt += fmt.Sprintf("%s: %s (type: %s)\n", k, arg.Description, typ)
 	}
@@ -200,7 +166,7 @@ func (c *Chat) ProcessAgentMemory(ctx context.Context, r RegistryCaller, agent *
 		}
 
 		c.Facts[key] = v
-		log.Printf("[FACTS] Stored: %s = %v", key, v)
+		// log.Printf("[FACTS] Stored: %s = %v", key, v)
 
 		if arg.Tags != nil {
 			for _, tag := range arg.Tags {

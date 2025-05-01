@@ -9,7 +9,7 @@ tasks:
       - build-web
     cmds:
       - mkdir -p bin
-      - go build -o bin/agencia cmd/agencia/main.go
+      - go build -ldflags "-X main.Version=$(git describe --tags --always)" -o bin/agencia cmd/agencia/main.go
 
   build-web:
     desc: Build Flutter web app and copy to local web folder

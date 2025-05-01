@@ -43,8 +43,7 @@ func Server(ctx context.Context, url string) {
 	http.HandleFunc("/api/run", handleRun)
 	http.HandleFunc("/api/chat", ChatWebSocketHandler)
 	http.HandleFunc("/api/facts", FactsHandler)
-	// TODO: print version
-	log.Println("Agencia server running on :8080")
+
 	log.Fatal(http.ListenAndServe(url, nil))
 }
 
