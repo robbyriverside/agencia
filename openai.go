@@ -30,10 +30,11 @@ func (t *TemplateContext) Get(name string, optionalInput ...string) string {
 	return res.Output
 }
 
-func (r *Registry) CallAI(ctx context.Context, agent *agents.Agent, prompt string, input *TemplateContext) (string, error) {
+func (r *Registry) CallAI(ctx context.Context, agent *agents.Agent, prompt string, input any) (string, error) {
+	tc, _ := input.(*TemplateContext)
 	if tmpl, ok := agents.MockTemplates[agent.Name]; ok {
 		var buf bytes.Buffer
-		err := tmpl.Execute(&buf, input)
+		err := tmpl.Execute(&buf, tc)
 		if err != nil {
 			return "", fmt.Errorf("error executing mock template: %w", err)
 		}

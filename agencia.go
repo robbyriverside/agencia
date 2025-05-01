@@ -36,62 +36,65 @@ func (s *AgentSpec) String() string {
 	return string(b)
 }
 
-func LoadRegistry(specfile string) (Registry, error) {
+func LoadRegistry(specfile string) (*Registry, error) {
 	spec, err := loadAgentSpecFile(specfile)
 	if err != nil {
 		return nil, fmt.Errorf("[LOAD ERROR] %w", err)
 	}
-	registry, err := RegisterAgents(spec)
+	registry, err := RegisterAgents(*spec)
 	if err != nil {
 		return nil, fmt.Errorf("[REGISTER ERROR] %w", err)
 	}
 	return registry, nil
 }
 
-func NewRegistry(spec string) (Registry, error) {
+func NewRegistry(spec string) (*Registry, error) {
 	specBytes := []byte(spec)
 	agentSpec, err := loadAgentSpec(specBytes)
 	if err != nil {
 		return nil, fmt.Errorf("[LOAD ERROR] %w", err)
 	}
-	registry, err := RegisterAgents(agentSpec)
+	registry, err := RegisterAgents(*agentSpec)
 	if err != nil {
 		return nil, fmt.Errorf("[REGISTER ERROR] %w", err)
+	}
+	for name, agent := range registry.Agents {
+		if len(agent.Facts) > 0 {
+			fmt.Printf("Agent '%s' has facts: %+v\n", name, agent.Facts)
+		}
 	}
 	return registry, nil
 }
 
-func loadAgentSpecFile(filename string) (AgentSpec, error) {
+func loadAgentSpecFile(filename string) (*AgentSpec, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		return AgentSpec{}, fmt.Errorf("cannot read agent file %s: %w", filename, err)
+		return nil, fmt.Errorf("cannot read agent file %s: %w", filename, err)
 	}
-	// fmt.Printf("[INFO] Loading agent file %s\n", filename)
 	return loadAgentSpec(data)
 }
 
-func loadAgentSpec(specbytes []byte) (AgentSpec, error) {
+func loadAgentSpec(specbytes []byte) (*AgentSpec, error) {
 	var spec AgentSpec
 	err := yaml.Unmarshal(specbytes, &spec)
 	if err != nil {
-		return AgentSpec{}, fmt.Errorf("invalid YAML: %w", err)
+		return nil, fmt.Errorf("invalid YAML: %w", err)
 	}
-	return spec, nil
+	return &spec, nil
 }
 
-func RegisterAgents(spec AgentSpec) (Registry, error) {
-	// fmt.Println("[INFO] Registering agents...", spec)
-	registry := Registry{}
+func RegisterAgents(spec AgentSpec) (*Registry, error) {
+	registry := &Registry{Agents: make(map[string]*agents.Agent)}
 	if spec.Agents != nil {
 		for name, agent := range spec.Agents {
 			agent.Name = name
-			registry[name] = &agent
+			registry.Agents[name] = &agent
 			if (agent.Function != nil && agent.Template != "") || (agent.Function != nil && agent.Prompt != "") || (agent.Template != "" && agent.Prompt != "") {
 				return nil, fmt.Errorf("agent '%s' has more than one of Function, Template, and Prompt set", name)
 			}
 		}
 	}
-	if len(registry) == 0 {
+	if len(registry.Agents) == 0 {
 		return nil, errors.New("no agents defined")
 	}
 	return registry, nil

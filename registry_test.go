@@ -47,8 +47,10 @@ func TestFunctionAgentWithInputPrompt(t *testing.T) {
 		},
 	}
 
-	reg := Registry{
-		"test_func": agent,
+	reg := &Registry{
+		Agents: map[string]*agents.Agent{
+			"test_func": agent,
+		},
 	}
 
 	t.Run("missing required value", func(t *testing.T) {

@@ -1,25 +1,47 @@
 package agencia
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"encoding/json"
+
 	"github.com/gorilla/websocket"
+	"github.com/robbyriverside/agencia/agents"
+	"gopkg.in/yaml.v3"
 )
 
+var defaultChat *Chat
+
 type Chat struct {
-	Agent string
+	Agent             string
+	Facts             map[string]any
+	Preferences       map[string][]string
+	TaggedPreferences map[string][]string
+	TaggedFacts       map[string][]string // tag => list of agent.fact keys
+	Registry          *Registry
 }
 
 func NewChat(agent string) *Chat {
 	return &Chat{
-		Agent: agent,
+		Agent:             agent,
+		Facts:             make(map[string]any),
+		Preferences:       make(map[string][]string),
+		TaggedPreferences: make(map[string][]string),
+		TaggedFacts:       make(map[string][]string),
 	}
 }
 
 func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
+	type ChatInitRequest struct {
+		Agent string `json:"agent"`
+		Spec  string `json:"spec"` // optionally store or use this
+	}
+
 	const (
 		writeWait  = 10 * time.Second
 		pongWait   = 60 * time.Second
@@ -38,10 +60,33 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	done := make(chan struct{})
+	_, initMsg, err := conn.ReadMessage()
+	if err != nil {
+		log.Printf("WebSocket init message error: %v", err)
+		return
+	}
 
-	// For now, create a default Chat session with a placeholder agent
-	session := NewChat("default-agent")
+	var initReq ChatInitRequest
+	if err := json.Unmarshal(initMsg, &initReq); err != nil {
+		log.Printf("Failed to decode chat init request: %v", err)
+		return
+	}
+	log.Println("Spec received:\n", initReq.Spec)
+
+	if defaultChat == nil {
+		defaultChat = NewChat(initReq.Agent)
+	} else {
+		defaultChat.Agent = initReq.Agent
+	}
+	registry, err := NewRegistry(initReq.Spec)
+	if err != nil {
+		log.Println("Failed to create registry:", err)
+		http.Error(w, "failed to create registry", http.StatusInternalServerError)
+		return
+	}
+	defaultChat.Registry = registry
+
+	done := make(chan struct{})
 
 	conn.SetReadLimit(512)
 	conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -76,14 +121,115 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		fmt.Printf("Received message for agent '%s': %s\n", session.Agent, msg)
+		fmt.Printf("Received message for agent '%s': %s\n", defaultChat.Agent, msg)
 
 		// Optionally echo the message back
+		input := string(msg)
+		ctx := context.Background()
+		resp := defaultChat.Registry.Run(ctx, defaultChat.Agent, input)
+
+		agent := defaultChat.Registry.Agents[defaultChat.Agent]
+		if agent != nil {
+			defaultChat.ProcessAgentMemory(ctx, defaultChat.Registry, agent, input, resp)
+		}
+
 		conn.SetWriteDeadline(time.Now().Add(writeWait))
-		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(resp)); err != nil {
 			log.Println("WebSocket write error:", err)
 			conn.Close()
 			break
 		}
 	}
+}
+
+// ProcessAgentMemory is called after an agent runs to allow post-processing of input/output for memory storage.
+// Extracts facts using AI and stores them in chat memory.
+func (c *Chat) ProcessAgentMemory(ctx context.Context, r RegistryCaller, agent *agents.Agent, input, output string) {
+	if len(agent.Facts) == 0 {
+		return
+	}
+
+	// Create prompt
+	prompt := "Given the following interaction, extract the following facts as YAML:\n\n"
+	prompt += "Input:\n" + input + "\n\n"
+	prompt += "Output:\n" + output + "\n\n"
+	prompt += "Facts to extract:\n"
+	for k, arg := range agent.Facts {
+		typ := arg.Type
+		if typ == "" {
+			typ = "string"
+		}
+		if arg.Description == "" {
+			log.Printf("[FACTS] Warning: fact '%s' has no description", k)
+		} else {
+			log.Printf("[FACTS] Preparing to extract: %s = %s (type: %s)", k, arg.Description, typ)
+		}
+		prompt += fmt.Sprintf("%s: %s (type: %s)\n", k, arg.Description, typ)
+	}
+	prompt += "\nRespond ONLY with a valid YAML block and no explanation or markdown."
+
+	// Use agent description and mock function to call AI
+	resp, err := r.CallAI(ctx, &agents.Agent{
+		Description: "Extract structured facts from input and output text.",
+	}, prompt, nil)
+	if err != nil {
+		log.Printf("[FACTS] AI call failed: %v", err)
+		return
+	}
+
+	// Parse YAML into map
+	result := make(map[string]any)
+	cleanResp := ExtractYAMLFromMarkdown(resp)
+	if err := yaml.Unmarshal([]byte(cleanResp), &result); err != nil {
+		log.Printf("[FACTS] Failed to parse YAML: %v\nAI Output:\n%s", err, resp)
+		return
+	}
+
+	// Store each fact and tag, with checks for missing/empty/null
+	for k, arg := range agent.Facts {
+		key := fmt.Sprintf("%s.%s", agent.Name, k)
+
+		v, ok := result[k]
+		if !ok {
+			log.Printf("[FACTS] AI did not return value for: %s", key)
+			continue
+		}
+		if v == nil || (fmt.Sprintf("%v", v) == "") {
+			log.Printf("[FACTS] Value for %s is empty or null", key)
+			continue
+		}
+
+		c.Facts[key] = v
+		log.Printf("[FACTS] Stored: %s = %v", key, v)
+
+		if arg.Tags != nil {
+			for _, tag := range arg.Tags {
+				c.TaggedFacts[tag] = append(c.TaggedFacts[tag], key)
+			}
+		}
+	}
+}
+
+// FactsHandler serves the facts and preferences of the current chat session.
+func FactsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(map[string]any{
+		"facts":       defaultChat.Facts,
+		"preferences": defaultChat.Preferences,
+	})
+	if err != nil {
+		http.Error(w, "failed to encode facts", http.StatusInternalServerError)
+	}
+}
+
+// ExtractYAMLFromMarkdown locates a ```yaml ... ``` block and extracts its content.
+func ExtractYAMLFromMarkdown(s string) string {
+	if strings.HasPrefix(s, "```yaml") {
+		start := strings.Index(s, "\n")
+		end := strings.LastIndex(s, "```")
+		if start != -1 && end != -1 && end > start {
+			return s[start+1 : end]
+		}
+	}
+	return s
 }

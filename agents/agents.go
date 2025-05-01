@@ -39,7 +39,7 @@ type Agent struct {
 	Alias       string
 	Function    AgentFn
 	Listeners   []string
-	Facts       []Fact
+	Facts       map[string]*Fact
 	Procedure   []string
 }
 

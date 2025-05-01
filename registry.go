@@ -23,18 +23,25 @@ func (e *AgentNotFoundError) Error() string {
 	return fmt.Sprintf("could not find agent: %s", e.AgentName)
 }
 
+type RegistryCaller interface {
+	CallAI(ctx context.Context, agent *agents.Agent, prompt string, tmplCtx any) (string, error)
+}
+
+type Registry struct {
+	Agents map[string]*agents.Agent
+	Chat   *Chat
+}
+
 type Libraries map[string]Registry
 
-type Registry map[string]*agents.Agent
-
 var libraries Libraries = map[string]Registry{
-	"rag": rag.Agents,
+	"rag": {Agents: rag.Agents},
 }
 
 // LookupAgent resolves both unqualified and qualified agent names
 func (r *Registry) LookupAgent(name string) (*agents.Agent, error) {
 	if !strings.Contains(name, ".") {
-		agent, ok := (*r)[name]
+		agent, ok := r.Agents[name]
 		if !ok {
 			return nil, &AgentNotFoundError{AgentName: name}
 		}
@@ -47,7 +54,7 @@ func (r *Registry) LookupAgent(name string) (*agents.Agent, error) {
 	if !ok {
 		return nil, &AgentNotFoundError{AgentName: name}
 	}
-	agent, ok := pkg[agentName]
+	agent, ok := pkg.Agents[agentName]
 	if !ok {
 		return nil, &AgentNotFoundError{AgentName: name}
 	}
@@ -55,7 +62,7 @@ func (r *Registry) LookupAgent(name string) (*agents.Agent, error) {
 }
 
 func (r *Registry) RegisterAgent(agent *agents.Agent) {
-	(*r)[agent.Name] = agent
+	r.Agents[agent.Name] = agent
 }
 
 func (r *Registry) Run(ctx context.Context, name string, input string) string {
@@ -221,6 +228,9 @@ note: Have a nice day.
 	if err != nil {
 		return AgentResult{Ran: true, Error: err, AgentName: name}
 	}
+	if r.Chat != nil {
+		r.Chat.ProcessAgentMemory(ctx, r, agent, input, resp)
+	}
 	return AgentResult{Output: resp, Ran: true, AgentName: name}
 }
 
@@ -228,6 +238,9 @@ func (r *Registry) handleTemplateAgent(ctx context.Context, agent *agents.Agent,
 	finalPrompt, err := r.renderFinalPrompt(ctx, agent.Template, name, input)
 	if err != nil {
 		return AgentResult{Ran: false, Error: err, AgentName: name}
+	}
+	if r.Chat != nil {
+		r.Chat.ProcessAgentMemory(ctx, r, agent, input, finalPrompt)
 	}
 	return AgentResult{Output: finalPrompt, Ran: true, AgentName: name}
 }
@@ -243,6 +256,9 @@ func (r *Registry) handlePromptAgent(ctx context.Context, agent *agents.Agent, i
 	resp, err := r.CallAI(ctx, agent, finalPrompt, &TemplateContext{Input: input, ctx: ctx, Registry: *r})
 	if err != nil {
 		return AgentResult{Ran: true, Error: err, AgentName: name}
+	}
+	if r.Chat != nil {
+		r.Chat.ProcessAgentMemory(ctx, r, agent, input, resp)
 	}
 	return AgentResult{Output: resp, Ran: true, AgentName: name}
 }
