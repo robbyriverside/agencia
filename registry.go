@@ -92,6 +92,31 @@ func (r *Registry) RunPrint(ctx context.Context, name string, input string) erro
 	return nil
 }
 
+func (r *Registry) generateAIInputFromPrompt(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
+	resp, err := r.CallAI(ctx, agent, prompt, &TemplateContext{Input: prompt, ctx: ctx, Registry: *r})
+	if err != nil {
+		return "", err
+	}
+	resp = strings.TrimSpace(resp)
+
+	if strings.HasPrefix(resp, "ERROR:") {
+		return "", fmt.Errorf("AI error: %s", resp)
+	}
+	if strings.Contains(resp, "```") {
+		start := strings.Index(resp, "```")
+		end := strings.LastIndex(resp, "```")
+		if start != -1 && end > start {
+			resp = resp[start+3 : end]
+			resp = strings.TrimSpace(resp)
+		}
+	}
+	if strings.HasPrefix(resp, "yaml\n") {
+		resp = strings.TrimPrefix(resp, "yaml\n")
+		resp = strings.TrimSpace(resp)
+	}
+	return resp, nil
+}
+
 func (r *Registry) CallAgent(ctx context.Context, name string, input string) AgentResult {
 	agent, err := r.LookupAgent(name)
 	if err != nil {
@@ -103,9 +128,56 @@ func (r *Registry) CallAgent(ctx context.Context, name string, input string) Age
 
 	if agent.Function != nil {
 		var inputMap map[string]any
-		if err := yaml.Unmarshal([]byte(input), &inputMap); err != nil {
-			return AgentResult{Ran: true, Error: fmt.Errorf("cannot read function input as yaml: %w", err), AgentName: name}
+
+		if agent.InputPrompt != nil {
+			promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
+			for k, arg := range agent.InputPrompt {
+				required := "optional"
+				if arg.Required {
+					required = "required"
+				}
+				promptDesc += fmt.Sprintf(
+					"%s: %s (type: %s, %s)\n",
+					k,
+					arg.Description,
+					arg.Type,
+					required,
+				)
+			}
+			// Add clarification for YAML-only output and example format
+			promptDesc += `
+Respond ONLY with a valid YAML object that matches the above field descriptions. 
+Do not include markdown formatting or any explanation. 
+If a required field cannot be reasonably inferred from the input, respond with:
+ERROR: missing required field <name>
+
+Example:
+
+Input:
+Please generate a greeting and optionally add a note.
+
+Fields:
+greeting: the greeting message. (type: string, required)
+note: an optional note to include. (type: string, optional)
+
+Expected YAML:
+greeting: Hello!
+note: Have a nice day.
+`
+
+			resp, err := r.generateAIInputFromPrompt(ctx, agent, promptDesc)
+			if err != nil {
+				return AgentResult{Ran: true, Error: err, AgentName: name}
+			}
+			if err := yaml.Unmarshal([]byte(resp), &inputMap); err != nil {
+				return AgentResult{Ran: true, Error: fmt.Errorf("failed to parse AI YAML output: %w\nAI response:\n%s", err, resp), AgentName: name}
+			}
+		} else {
+			if err := yaml.Unmarshal([]byte(input), &inputMap); err != nil {
+				return AgentResult{Ran: true, Error: fmt.Errorf("cannot read function input as yaml: %w", err), AgentName: name}
+			}
 		}
+
 		resp, err := agent.Function(ctx, inputMap)
 		if err != nil {
 			return AgentResult{Ran: true, Error: err, AgentName: name}
