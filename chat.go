@@ -17,21 +17,21 @@ import (
 var defaultChat *Chat
 
 type Chat struct {
-	Agent             string
-	Facts             map[string]any
-	Preferences       map[string][]string
-	TaggedPreferences map[string][]string
-	TaggedFacts       map[string][]string // tag => list of agent.fact keys
-	Registry          *Registry
+	Agent string
+	Facts map[string]any
+	// Observations       map[string][]string
+	// TaggedObservations map[string][]string
+	TaggedFacts map[string][]string // tag => list of agent.fact keys
+	Registry    *Registry
 }
 
 func NewChat(agent string) *Chat {
 	return &Chat{
-		Agent:             agent,
-		Facts:             make(map[string]any),
-		Preferences:       make(map[string][]string),
-		TaggedPreferences: make(map[string][]string),
-		TaggedFacts:       make(map[string][]string),
+		Agent: agent,
+		Facts: make(map[string]any),
+		// Observations:      make(map[string][]string),
+		// TaggedObservations: make(map[string][]string),
+		TaggedFacts: make(map[string][]string),
 	}
 }
 
@@ -176,12 +176,12 @@ func (c *Chat) ProcessAgentMemory(ctx context.Context, r RegistryCaller, agent *
 	}
 }
 
-// FactsHandler serves the facts and preferences of the current chat session.
+// FactsHandler serves the facts and Observations of the current chat session.
 func FactsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(map[string]any{
-		"facts":       defaultChat.Facts,
-		"preferences": defaultChat.Preferences,
+		"facts": defaultChat.Facts,
+		// "Observations": defaultChat.Observations,
 	})
 	if err != nil {
 		http.Error(w, "failed to encode facts", http.StatusInternalServerError)
