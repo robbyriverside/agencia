@@ -20,6 +20,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type ConfigOptions struct {
+	Verbose bool `short:"v" long:"verbose" required:"false" description:"Verbose messages"`
+}
+
+var Options *ConfigOptions
+
+func GetOptions() *ConfigOptions {
+	if Options == nil {
+		Options = &ConfigOptions{}
+	}
+	return Options
+}
+
+func IsVerbose() bool {
+	return Options != nil && Options.Verbose
+}
+
 type AgentSpec struct {
 	Agents map[string]agents.Agent `yaml:"agents,omitempty"`
 }

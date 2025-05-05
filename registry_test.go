@@ -14,7 +14,7 @@ import (
 // Run tests multiple times to ensure the AI consistently fills in the required fields
 const loopCount = 10
 
-func TestFunctionAgentWithInputPrompt(t *testing.T) {
+func TestFunctionAgentWithInputs(t *testing.T) {
 	ctx := context.Background()
 	_ = godotenv.Load()
 
@@ -31,7 +31,7 @@ func TestFunctionAgentWithInputPrompt(t *testing.T) {
 			b, _ := input["b"].(string)
 			return a + "|" + b, nil
 		},
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"a": {
 				Name:        "a",
 				Description: "Required field A",
@@ -56,8 +56,9 @@ func TestFunctionAgentWithInputPrompt(t *testing.T) {
 	t.Run("missing required value", func(t *testing.T) {
 		for i := 0; i < loopCount; i++ {
 			t.Run(fmt.Sprintf("run %d", i), func(t *testing.T) {
-				res := reg.CallAgent(ctx, "test_func", "b: optional\n")
-				assert.True(t, res.Ran)
+				res := NewRun(reg, nil).CallAgent(ctx, "test_func", "b: optional\n")
+				t.Logf("Run %d: %+v", i, res.Error)
+				assert.False(t, res.Ran)
 				if assert.Error(t, res.Error) {
 					assert.Contains(t, res.Error.Error(), "a")
 				}
@@ -68,7 +69,8 @@ func TestFunctionAgentWithInputPrompt(t *testing.T) {
 	t.Run("missing optional value", func(t *testing.T) {
 		for i := 0; i < loopCount; i++ {
 			t.Run(fmt.Sprintf("run %d", i), func(t *testing.T) {
-				res := reg.CallAgent(ctx, "test_func", "a: hello\n")
+				res := NewRun(reg, nil).CallAgent(ctx, "test_func", "a: hello\n")
+				t.Logf("Run %d: %+v", i, res.Error)
 				assert.True(t, res.Ran)
 				if assert.NoError(t, res.Error) {
 					assert.NotEmpty(t, res.Output)

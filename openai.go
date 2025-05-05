@@ -13,37 +13,46 @@ import (
 )
 
 type TemplateContext struct {
-	Input    string
-	Registry Registry
-	ctx      context.Context
+	UserInput string
+	Inputs    map[string]any
+	Run       *RunContext
+	ctx       context.Context
 }
 
 func (t *TemplateContext) Get(name string, optionalInput ...string) string {
-	input := t.Input
+	input := t.UserInput
 	if len(optionalInput) > 0 {
 		input = optionalInput[0]
 	}
-	res := t.Registry.CallAgent(t.ctx, name, input)
+	res := t.Run.CallAgent(t.ctx, name, input)
 	if res.Error != nil {
 		return fmt.Sprintf("[error calling %s: %v]", name, res.Error)
 	}
 	return res.Output
 }
 
-func (r *Registry) CallAI(ctx context.Context, agent *agents.Agent, prompt string, input any) (string, error) {
-	tc, _ := input.(*TemplateContext)
-	if tmpl, ok := agents.MockTemplates[agent.Name]; ok {
-		var buf bytes.Buffer
-		err := tmpl.Execute(&buf, tc)
-		if err != nil {
-			return "", fmt.Errorf("error executing mock template: %w", err)
-		}
-		return "MOCK: " + buf.String(), nil
+func (t *TemplateContext) Input(optionalInput ...string) any {
+	if len(optionalInput) == 0 {
+		return t.UserInput
+	} else if len(optionalInput) == 1 {
+		return t.Inputs[optionalInput[0]]
 	}
+	if len(optionalInput) > 2 {
+		t.Run.Errorf("invalid Input arguments %d < 3  %q", len(optionalInput), optionalInput)
+	}
+	result := t.Inputs[optionalInput[0]]
+	if result == "" {
+		return optionalInput[1]
+	} else {
+		return result
+	}
+}
+
+func (r *RunContext) CallAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
 	return r.CallOpenAI(ctx, agent, prompt)
 }
 
-func (r *Registry) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
+func (r *RunContext) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
 	client, err := agents.GetOpenAIClient()
 	if err != nil {
 		return "", err
@@ -51,11 +60,11 @@ func (r *Registry) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt s
 	tools := []openai.Tool{}
 	badListeners := []string{}
 	for _, listenerName := range agent.Listeners {
-		listenerAgent, err := r.LookupAgent(listenerName)
+		listenerAgent, err := r.Registry.LookupAgent(listenerName)
 		if err != nil {
 			return "", fmt.Errorf("error looking up listener agent %s: %w", listenerName, err)
 		}
-		if listenerAgent.Description == "" || len(listenerAgent.InputPrompt) == 0 {
+		if listenerAgent.Description == "" || len(listenerAgent.Inputs) == 0 {
 			badListeners = append(badListeners, listenerName)
 			continue
 		}
@@ -94,7 +103,7 @@ func (r *Registry) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt s
 	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 }
 
-func (r *Registry) handleToolCalls(ctx context.Context, prompt string, tools []openai.Tool, initialToolCalls []openai.ToolCall, depth int, trace []string) (string, error) {
+func (r *RunContext) handleToolCalls(ctx context.Context, prompt string, tools []openai.Tool, initialToolCalls []openai.ToolCall, depth int, trace []string) (string, error) {
 	if depth > 5 {
 		return "", fmt.Errorf(
 			"too many recursive tool call levels (depth=%d); possible infinite loop.\nTrace:\n%s",
@@ -126,9 +135,9 @@ func (r *Registry) handleToolCalls(ctx context.Context, prompt string, tools []o
 				}
 				var buf bytes.Buffer
 				err = tmpl.Execute(&buf, &TemplateContext{
-					Input:    args,
-					Registry: *r,
-					ctx:      ctx,
+					UserInput: args,
+					Run:       r,
+					ctx:       ctx,
 				})
 				if err != nil {
 					return "", fmt.Errorf("error executing template output from agent %s: %w", agentName, err)
@@ -194,7 +203,7 @@ func buildToolParameters(agent *agents.Agent) map[string]interface{} {
 		"required":   []string{},
 	}
 
-	for fieldName, arg := range agent.InputPrompt {
+	for fieldName, arg := range agent.Inputs {
 		properties := paramSchema["properties"].(map[string]interface{})
 		argType := arg.Type
 		if argType == "" {

@@ -27,7 +27,12 @@ func TestCallOpenAI_FunctionCalling(t *testing.T) {
 	reg.RegisterAgent(&agents.Agent{
 		Name:        "greet",
 		Description: "Generates a greeting message given a person's name",
-		Template:    "Hello, {{ .Input }}!",
+		Inputs: map[string]*agents.Argument{
+			"personName": {
+				Description: "The name of the person to greet.",
+			},
+		},
+		Template: "Hello, {{ .Input \"personName\" }}!",
 	})
 
 	reg.RegisterAgent(&agents.Agent{
@@ -36,16 +41,10 @@ func TestCallOpenAI_FunctionCalling(t *testing.T) {
 		Listeners: []string{"greet"},
 	})
 
-	input := &TemplateContext{
-		Input:    "Alice",
-		Registry: *reg,
-		ctx:      ctx,
-	}
-
 	agent, err := reg.LookupAgent("tryme")
 	assert.NoError(t, err, "should find tryme agent")
 
-	output, err := reg.CallAI(ctx, agent, "Say hello to Alice.", input)
+	output, err := NewRun(reg, nil).CallAI(ctx, agent, "Say hello to Alice.")
 	assert.NoError(t, err, "should not error")
 	assert.Contains(t, output, "Hello, Alice", "should generate greeting via function call")
 }
@@ -67,16 +66,10 @@ func TestCallOpenAI_ToolNotFound(t *testing.T) {
 		Listeners: []string{"nonexistent_tool"},
 	})
 
-	input := &TemplateContext{
-		Input:    "Alice",
-		Registry: *reg,
-		ctx:      ctx,
-	}
-
 	agent, err := reg.LookupAgent("tryme")
 	assert.NoError(t, err, "should find tryme agent")
 
-	output, err := reg.CallAI(ctx, agent, "Say hello to Alice.", input)
+	output, err := NewRun(reg, nil).CallAI(ctx, agent, "Say hello to Alice.")
 	assert.Error(t, err, "should error due to missing tool")
 	assert.Contains(t, err.Error(), "could not find agent", "should mention missing agent")
 	assert.Empty(t, output, "output should be empty on tool not found")
@@ -97,7 +90,7 @@ func TestCallOpenAI_MultipleToolCalls(t *testing.T) {
 		Name:        "greet",
 		Description: "Generates a greeting message given a person's name.",
 		Template:    "Hello, {{ .Input }}!",
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"personName": {
 				Description: "The name of the person to greet.",
 			},
@@ -107,7 +100,7 @@ func TestCallOpenAI_MultipleToolCalls(t *testing.T) {
 		Name:        "farewell",
 		Description: "Generates a farewell message saying goodbye to a person's name.",
 		Template:    "Goodbye, {{ .Input }}!",
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"personName": {
 				Description: "The name of the person to say goodbye to.",
 			},
@@ -119,7 +112,7 @@ func TestCallOpenAI_MultipleToolCalls(t *testing.T) {
 		Listeners: []string{"greet", "farewell"},
 	})
 
-	res := reg.CallAgent(ctx, "tryme", "My name is Alice")
+	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "My name is Alice")
 	fmt.Printf("***Output: %s\n", res.Output)
 	assert.NoError(t, res.Error, "should not error")
 	assert.Contains(t, res.Output, "Hello, Alice", "should generate greeting via function call")
@@ -143,7 +136,7 @@ func TestCallOpenAI_EmptyToolOutput(t *testing.T) {
 		Function: func(ctx context.Context, input map[string]interface{}) (string, error) {
 			return "", nil
 		},
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"input": {
 				Description: "Any input to trigger the silent tool.",
 			},
@@ -157,7 +150,7 @@ func TestCallOpenAI_EmptyToolOutput(t *testing.T) {
 		Listeners: []string{"silent_tool"},
 	})
 
-	res := reg.CallAgent(ctx, "tryme", "trigger silence")
+	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "trigger silence")
 	fmt.Printf("***Output: %s\n", res.Output)
 	assert.NoError(t, res.Error, "should not error even if tool output is empty")
 	// Optionally check if output is still acceptable (blank or partial)
@@ -178,7 +171,7 @@ func TestCallOpenAI_RecursiveToolCalling(t *testing.T) {
 		Name:        "echo1",
 		Description: "Echo agent 1.",
 		Template:    "Calling echo2: {{ .Input }}",
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"input": {
 				Description: "Input to echo1.",
 			},
@@ -188,7 +181,7 @@ func TestCallOpenAI_RecursiveToolCalling(t *testing.T) {
 		Name:        "echo2",
 		Description: "Echo agent 2.",
 		Template:    "Calling echo1: {{ .Input }}",
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"input": {
 				Description: "Input to echo2.",
 			},
@@ -200,7 +193,7 @@ func TestCallOpenAI_RecursiveToolCalling(t *testing.T) {
 		Listeners: []string{"echo1", "echo2"},
 	})
 
-	res := reg.CallAgent(ctx, "tryme", "recursive start")
+	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "recursive start")
 	fmt.Printf("***Output: %s\n", res.Output)
 	assert.Error(t, res.Error, "should error due to recursion limit")
 	assert.Contains(t, res.Error.Error(), "recursive tool call", "error should mention recursion limit")
@@ -221,7 +214,7 @@ func TestCallOpenAI_InvalidToolSchema(t *testing.T) {
 		Name:        "badtool",
 		Description: "This tool has a broken input schema.",
 		Template:    "Hello, {{ .Input }}!",
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"input": {
 				Description: "This input field is fine.",
 				Type:        "strnig", // intentionally invalid type (should be "string")
@@ -235,7 +228,7 @@ func TestCallOpenAI_InvalidToolSchema(t *testing.T) {
 		Listeners: []string{"badtool"},
 	})
 
-	res := reg.CallAgent(ctx, "tryme", "test invalid schema")
+	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "test invalid schema")
 	fmt.Printf("***Error: %s\n", res.Error)
 
 	assert.Error(t, res.Error, "should error due to invalid schema")
@@ -259,7 +252,7 @@ func TestCallOpenAI_ContinuationMissingTool(t *testing.T) {
 		Listeners: []string{"nonexistent_tool"},
 	})
 
-	res := reg.CallAgent(ctx, "tryme", "Alice")
+	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "Alice")
 	fmt.Printf("***Error: %s\n", res.Error)
 
 	assert.Error(t, res.Error, "should error due to missing agent during continuation")
@@ -290,7 +283,7 @@ func TestCallOpenAI_AgentTemplateFails(t *testing.T) {
 		Listeners: []string{"broken_template"},
 	})
 
-	res := reg.CallAgent(ctx, "tryme", "Alice")
+	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "Alice")
 	fmt.Printf("***Error: %s\n", res.Error)
 
 	assert.Error(t, res.Error, "should error due to template execution failure")
@@ -310,7 +303,7 @@ func TestCallOpenAI_MultipleBadListeners(t *testing.T) {
 	// Bad listener 1 (missing Description)
 	reg.RegisterAgent(&agents.Agent{
 		Name: "badtool1",
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"input": {
 				Description: "An input.",
 			},
@@ -327,7 +320,7 @@ func TestCallOpenAI_MultipleBadListeners(t *testing.T) {
 	reg.RegisterAgent(&agents.Agent{
 		Name:        "goodtool",
 		Description: "Good tool for testing.",
-		InputPrompt: map[string]agents.Argument{
+		Inputs: map[string]*agents.Argument{
 			"input": {
 				Description: "Good input.",
 			},
@@ -342,7 +335,7 @@ func TestCallOpenAI_MultipleBadListeners(t *testing.T) {
 		Listeners: []string{"badtool1", "badtool2", "goodtool"},
 	})
 
-	res := reg.CallAgent(ctx, "tryme", "testing bad listeners")
+	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "testing bad listeners")
 	fmt.Printf("***Error: %s\n", res.Error)
 
 	assert.Error(t, res.Error, "should error due to multiple invalid listeners")

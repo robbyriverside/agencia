@@ -52,8 +52,8 @@ agents:
       Hello, {{ .Input }}!
 ```
 
-Notice the only difference is that the prompt keyword becomes a template.  You cannot use both at
-once. This is a case where we don't need AI to determine how to say hello.  A template agent
+Notice the only difference is that the prompt keyword becomes template.  You cannot use both at
+once. If we have a case where we don't need AI to determine how to say hello.  A template agent
 answers the greeting more directly.  But that doesn't mean that a template can't call an agent.
 
 
@@ -64,16 +64,39 @@ agents:
     prompt: |
       Say hello to {{ .Input }}.
   intro:
-    Description: Introduce our service to the user
+    description: Introduce our service to the user
     template: |
-      {{ Get "greeting" }}
+      {{ .Get "greeting" }}
       Welcome to our service!
 ```
 
 The intro agent uses Get to call the greeting agent, which calls AI to generate the greeting. Of
-course, a template agent cannot use listeners because AI is required to call them.  There are a
-few more features of agents that we will cover later.  But this is all you need to understand how
-agents work.
+course, a template agent cannot use listeners because AI is required to call them.  
+
+A third agent type is an alias agent.  This is a simple agent that just calls another agent. An
+alias agent allows redefinition of the inputs, facts (covered later), and description of another
+agent. This can be important if you want the same agent behavior but in a different situation.
+
+```yaml
+agents:
+  greeting:
+    inputs:
+      name:
+        description: The user's name
+    description: Greet the user
+    prompt: |
+      Say hello to {{ .Input "name" }}.
+  greet:
+    description: Greet the pilot
+    inputs:
+      name:
+        description: The pilot's callsign
+    alias: "greeting"
+```
+
+The greet agent redefines the name input so that it looks for a pilot callsign instead of the user
+name. There are a few more features of agents that we will cover.  But this is all you need to
+understand to see the simplicity of using agents.
 
 ## 3. Structured vs Unstructured Input
 
@@ -83,50 +106,50 @@ function agent, which calls a function from the coding library. Like templates, 
 return a string. However, the inputs to the function are structured, so we need a way to define the
 arguments.  
 
-An agent can take an input_prompt, which is a map of names and descriptions of what goes into that
+An agent can take an inputs, which is a map of names and descriptions of what goes into that
 value.  This is just like the arguments for any AI function (aka tool).  This is required for
 function agents and listeners because they both take structured arguments.
 
-But you can define an input_prompt for any agent, even a template agent.  This calls AI on the
-Input as needed to generate the arguments for the agent before it is called.  Once we have those
-inputs, the template or prompt can reference those values using Args for all the arguments or Arg
-to get a specific argument.
+But you can define an inputs for any agent, even a template agent.  This calls AI on the
+Input as needed to generate the inputs for the agent before it is called.  Once we have those
+inputs, the template or prompt can reference those values using Inputs for all the inputs or Input
+with a name to get a specific input, and finally Input by itself is the user input.
 
 ```yaml
 agents:
   greet:
     description: Greet the user
-    input_prompt:
+    inputs:
       name:
         description: The name of the person to greet
     prompt: |
-      Say hello to {{ .Arg "name" }}.
+      Say hello to {{ .Input "name" }}.
 ```
 
 If the user wrote something like:  "Hi, my name is Mary and I love warm hugs"  Just calling 
-Input would return the entire string.  But calling Arg "name" would return "Mary".  This
+Input would return the entire string.  But calling Input "name" would return "Mary".  This
 intelligent deconstruction is useful even when not calling an external function.
 
 A prompt and a template are string-to-string pure functions.  So the structure produced by the
-input_prompt is not passed.  Instead, it is for use in the template or prompt.  
+inputs is not passed.  Instead, it is for use in the template or prompt.  
 
 ## 4. Agent Libraries
 
 Function agents must be declared in code.  These can be organized into a library of agents.
 Libraries can be used in other libraries or agents.  The library name references the agent using
 dot syntax: 'libname.agentname'.  For example, you might use a time library agent like this:
-'time.current'.  Below is an example
+'time.current'.  Here is an example:
 
 ```yaml
 agents:
   greet:
     description: Greet the user
-    input_prompt:
+    inputs:
       name:
         description: The name of the person to greet
     prompt: |
       Welcome, it is {{ .Get "time.current"}}
-      Say hello to {{ .Arg "name" }}.
+      Say hello to {{ .Input "name" }}.
 ```
 
 The Go code convention used for Agencia is to declare a package variable called Agents. This is a
@@ -139,11 +162,18 @@ in the context.  But if you do that, these are no longer pure functions.
 ## 5. Remembering Facts in Chat
 
 When using Agencia chat, a session object keeps a set of structured facts stored by the agents.
-Facts are declared on the agent using the facts keyword.  Facts are similar to input_prompt, in
-that they are descriptions of values filled in by AI.  But in this case when you declare a fact, it
-is stored in the Chat object by agent name.  So to reference a fact in another template, you use the
-agent name as the key.  For example, if you have an agent called 'greet' that declares a fact called
-'name', you can refer to it in another template using {{ .Fact "greet.name" }}.
+Facts are declared on the agent using the facts keyword.  Facts are similar to inputs, in
+that they are descriptions of values to be filled in by AI.  
+
+When you declare a fact, it is stored in the Chat object by agent name.  So to reference a fact in
+another template, you use the agent name in the key.  For example, if you have an agent called
+'greet' that declares a fact called 'name', you can refer to it in another template using {{ .Fact
+"greet.name" }}.
+
+The input prompt is filled in by AI using the user input only.  But the facts are filled in using
+both the input and the result of the agent.  Facts are assigned after the agent runs.  Which means,
+if you use the fact in the same agent, it will be the previous value or the default value for that
+type.
 
 ```yaml
 agents:
@@ -166,11 +196,6 @@ agents:
 Once an agent stores the fact, it can be accessed by any agent in the chat and is saved for the
 next time you use the same chat ID.
 
-The input prompt is filled in by AI using the user input only.  But the facts are filled in using
-both the input and the result of the template or prompt.  So you can't use your own facts in the
-input prompt or template.  However, you can reference your own facts, if what you want is the prior
-value.
-
 ## 6. Procedures
 
 An agent can also declare a procedure, which is a list of agents to call in order, and keeps all the
@@ -180,7 +205,7 @@ outputs from prior agents as the context for future agents.  Below is an example
 agents:
   checkout:
     description: Checkout a library book
-    input_prompt:
+    inputs:
       title:
         description: The title of the book to check out
     procedure:
@@ -188,14 +213,8 @@ agents:
       - get_library_card
       - check_out_book
     template: |
-      Checking out book: {{ .Arg "title" }}
+      Checking out book: {{ .Input "title" }}
       You will be notified when it is done.
-
-  intro:
-    description: Introduce our service to the user
-    template: |
-      {{ .Get "checkout" }}
-      Welcome to our service!
 ```
 
 Procedures are asynchronous; they run in  the background and notify the user with their result.
@@ -213,7 +232,7 @@ agents:
       library:
         description: The library where the book resides.
         scope: local
-    input_prompt:
+    inputs:
       title:
         description: The title of the book to check out
     procedure:
@@ -221,7 +240,7 @@ agents:
       - get_library_card
       - check_out_book
     template: |
-      Checking out book: {{ .Arg "title" }}
+      Checking out book: {{ .Input "title" }}
       Job ID: {{ .JobID }}
       You will be notified when it is done.
 

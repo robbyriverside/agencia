@@ -1,95 +1,73 @@
 annotated_yaml: |-
-    extract yaml blocks function World
-
-    Explanation:
-
-    Explanation for World
-ask_mood: |
-    How are you feeling today, World?
-bilingual_report: |-
-    Original: World
-
-    Spanish: Traducción de World
-
-    Sentiment: Sentiment: positive
-explain_yaml: Explanation for World
-extract_theme: |
-    The central theme of the poem is world.
-extract_yaml_block: extract yaml blocks function World
-get_issue: |
-    Issue: World
-    Please describe the issue in a few bullets.
-get_sentiment: 'Sentiment: positive'
-hello_user: |
-    Hello World! How can I help you today?
-interview_agent: |-
-    Summary for World
-
-    Questions about World
-intro_sequence: |-
-    Hello World! How can I help you today?
-
-
-    How are you feeling today, World?
-issue_summary: |
-    Summarize the issue below in one line:
-
-    World
-json_formatter: json formatter function World
-poem_analysis: |-
-    Poem:
-    Here is a short rhyming poem about World:
-
-    Roses are red,
-    Violets are blue,
-    World is great,
-    And so are you!
-
-
-    Theme:
-    The central theme of the poem is here is a short rhyming poem about world:
-
-    roses are red,
-    violets are blue,
-    world is great,
-    and so are you!
-    .
-structured_log: |-
-    User description for World
-
-    json formatter function World
-summarize_input: Summary for World
-support_flow: |-
-    Issue: World
-    Please describe the issue in a few bullets.
-
-
-    Based on the following summary, should we escalate this to a human agent?
-
-    Summarize the issue below in one line:
-
-    World
-
-    Respond with "Please escalate" or "No escalation required".
-
-    (Decision: No escalation required)
-translate_to_spanish: Traducción de World
-triage_decision: |
-    Based on the following summary, should we escalate this to a human agent?
-
-    Summarize the issue below in one line:
-
-    World
-
-    Respond with "Please escalate" or "No escalation required".
-
-    (Decision: No escalation required)
-turn_summary_into_questions: Questions about World
-user_description: User description for World
-write_poem: |
-    Here is a short rhyming poem about World:
-
-    Roses are red,
-    Violets are blue,
-    World is great,
-    And so are you!
+            [error calling extract_yaml_block: AI error: ERROR: missing required field greeting]
+        
+            Explanation:
+        
+            It seems like there is a bit of confusion in your request. YAML (YAML Ain't Markup Language) is a human-readable data serialization format commonly used for configuration files and data exchange between languages with different data structures. It is not a programming language itself with functions like those found in traditional programming languages.
+        
+            From your description "extract yaml blocks function World," it appears there might be a misunderstanding or a specific context missing. However, I'll try to break down possible interpretations:
+        
+            1. **"Extract YAML Blocks"**: This could be referring to a process or function (likely in a scripting language) designed to read or parse YAML files. Such a function would identify and retrieve data organized in YAML format from a file or a string. The goal is often to transform that data into a structure (like a dictionary or object) that's usable within your program.
+        
+            2. **"Function World"**: This portion is less clear in the context of YAML. It might mistakenly refer to a specific function or method named `World` that's used to operate on YAML data. In any case, YAML does not natively have functions, so any processing like this would typically happen in the programming language being used in conjunction with the YAML files, such as Python, JavaScript, etc.
+        
+            To proceed with writing or interpreting YAML, it would be helpful to have additional context or details. If you have a specific YAML file or a use case in mind, providing that could allow for more concrete guidance.
+        ask_mood: '[ERROR] AI error: ERROR: missing required field greeting'
+        bilingual_report: '[ERROR] AI error: ERROR: missing required field greeting'
+        explain_yaml: |-
+            The snippet you provided seems to be a mishmash of terms and directives that pertain to different contexts. YAML (YAML Ain't Markup Language) is a human-readable data serialization format commonly used for configuration files, data exchange between languages with different data structures, and more. However, the snippet doesn't appear to be valid YAML or directly related to YAML configuration.
+        
+            Let’s break down the components of the snippet to clarify any potential meaning or purpose:
+        
+            1. **YAML:** YAML is a format used for structuring data in a way that's both human-readable and easily parsed by machines. It is often used for configuration files and supports features like nested elements, lists, and mappings.
+        
+            2. **Extract YAML blocks:** This could refer to the process of parsing a file or a string to locate and retrieve sections formatted as YAML. This might be part of a larger operation where you need to work with or manipulate YAML data extracted from a text body or files.
+        
+            3. **Function:** In programming, a function is a block of organized, reusable code that is used to perform a single action. The term “function” here might be indicating a process or programming function designed to extract YAML blocks or process YAML.
+        
+            4. **World:** This term is out of context within what’s given. It might be a placeholder, part of a function name, or an identifier for some domain in which YAML blocks are being applied, or it could simply be an example of a key in a YAML file depending on the broader context.
+        
+            Considering all these points, if you are looking to understand how to extract YAML blocks, you would generally:
+        
+            - Use a YAML parser available in your programming language of choice, such as Python's PyYAML or JavaScript's js-yaml.
+            - Define a function to identify and manipulate YAML structures within a given input, if needed.
+            - Ensure that the data is structured properly according to the YAML syntax so it can be parsed without errors.
+        
+            If you're working on a specific task or need more detailed insights into a YAML document or function, providing additional context or a full document can help in giving a more precise explanation.
+        extract_theme: |-
+            The central theme of a poem titled "World" can vary greatly depending on its content and author. Since I do not have the text of the poem, I can only provide general potential themes. Common themes in poems titled "World" might include:
+        
+            1. Nature and the environment: exploring the beauty and complexity of the natural world.
+            2. Global interconnectedness: reflecting on how people and events around the globe are connected.
+            3. Human impact: examining how human actions affect the world and environment.
+            4. Perspective: offering a personal or philosophical take on one's place in the world.
+            5. Diversity: celebrating cultural, ecological, or social diversity in the world.
+        
+            Without the specific text, it's difficult to determine the precise central theme. If you provide the poem, I could offer a more detailed analysis.
+        extract_yaml_block: extract yaml blocks function World
+        get_issue: '[ERROR] AI error: ERROR: missing required field <name>'
+        get_sentiment: The word "World" on its own does not have an inherent sentiment. To analyze sentiment effectively, more context is needed. For instance, if the word "World" is used in a sentence like "The world is beautiful," it conveys a positive sentiment. In contrast, in a sentence like "The world is facing many challenges," it may suggest a more negative or neutral sentiment. Without additional context, it is difficult to determine the sentiment of the word "World" on its own.
+        hello_user: Hello! How can I assist you today? Whether you have questions, need information, or just want to chat, feel free to let me know!
+        interview_agent: |-
+            [error calling summarize_input: AI error: ERROR: missing required field greeting]
+        
+            1. What information is missing from the request that is needed for summarization?
+            2. How can someone provide the text they want summarized in bullet points?
+            3. What is the significance of including the original text when requesting a summary?
+        intro_sequence: |-
+            [error calling hello_user: AI error: ERROR: missing required field greeting]
+        
+            I'm just a program, so I don't have feelings, but I'm here and ready to help you with whatever you need! How can I assist you today?
+        issue_summary: Could you please provide more details or specify the issue you would like summarized?
+        json_formatter: json formatter function World
+        poem_analysis: '[ERROR] AI error: ERROR: missing required field greeting'
+        structured_log: |-
+            It looks like you've entered the word "World." Could you please provide more context or specify how I can assist you with this topic? Whether you're looking for information on world news, geography, history, or something else, I'm here to help!
+        
+            [error calling json_formatter: AI error: ERROR: missing required field greeting]
+        summarize_input: It looks like your request is incomplete. Could you please provide the full text or additional details so I can assist you better?
+        support_flow: '[ERROR] AI error: ERROR: missing required field greeting'
+        translate_to_spanish: The translation of "World" to Spanish is "Mundo."
+        triage_decision: No escalation required.
+        turn_summary_into_questions: It seems there was an error in generating the summary. Without the content or context of the document, it's challenging to create specific questions. If you can provide details or key points from the document, I would be happy to help formulate relevant questions.
+        user_description: Hello! It seems like you mentioned "World." Are you referring to a specific aspect of the world, such as world news, geography, history, or something else? Let me know how I can assist you further!

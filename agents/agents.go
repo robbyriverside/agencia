@@ -8,9 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/robbyriverside/agencia/utils"
 	"github.com/sashabaranov/go-openai"
-	"gopkg.in/yaml.v2"
 )
 
 type Argument struct {
@@ -33,7 +31,7 @@ type Fact struct {
 type Agent struct {
 	Name        string
 	Description string
-	InputPrompt map[string]Argument // field name -> Argument details
+	Inputs      map[string]*Argument // field name -> Argument details
 	Prompt      string
 	Template    string
 	Alias       string
@@ -59,47 +57,6 @@ func GetOpenAIClient() (*openai.Client, error) {
 	config.OrgID = org
 	openaiClient = openai.NewClientWithConfig(config)
 	return openaiClient, nil
-}
-
-func loadMockResponses(path string) error {
-	type MockSpec struct {
-		Responses map[string]string `yaml:"responses"`
-	}
-	var mock MockSpec
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("cannot read mock file %s: %w", path, err)
-	}
-	err = yaml.Unmarshal(data, &mock)
-	if err != nil {
-		return fmt.Errorf("invalid YAML in mock file %s: %w", path, err)
-	}
-	for name, tmplStr := range mock.Responses {
-		tmpl, err := utils.TemplateParse(name, tmplStr)
-		if err != nil {
-			return fmt.Errorf("error parsing mock template for %s: %w", name, err)
-		}
-		MockTemplates[name] = tmpl
-	}
-	return nil
-}
-
-func ConfigureAI(ctx context.Context, mockfile string) error {
-	if mockfile != "" {
-		if err := loadMockResponses(mockfile); err != nil {
-			return fmt.Errorf("[MOCK ERROR] %w", err)
-		}
-	} else {
-		apiKey := os.Getenv("OPENAI_API_KEY")
-		org := os.Getenv("OPENAI_ORG")
-		if apiKey == "" {
-			return errors.New("OPENAI_API_KEY must be set")
-		}
-		config := openai.DefaultConfig(apiKey)
-		config.OrgID = org
-		openaiClient = openai.NewClientWithConfig(config)
-	}
-	return nil
 }
 
 func CallOpenAI(ctx context.Context, prompt string) (string, error) {

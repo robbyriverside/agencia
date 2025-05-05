@@ -22,8 +22,9 @@ type runRequest struct {
 }
 
 type runResponse struct {
-	Output string `json:"output"`
-	Error  string `json:"error,omitempty"`
+	Output string     `json:"output"`
+	Error  string     `json:"error,omitempty"`
+	Card   *TraceCard `json:"card"`
 }
 
 func Server(ctx context.Context, url string) {
@@ -74,8 +75,8 @@ func handleRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "[RUN ERROR]", http.StatusBadRequest)
 		return
 	}
-	resp := registry.Run(ctx, req.Agent, req.Input)
+	resp, card := registry.Run(ctx, req.Agent, req.Input)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(runResponse{Output: resp})
+	json.NewEncoder(w).Encode(runResponse{Output: resp, Card: card})
 }

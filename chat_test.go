@@ -2,20 +2,20 @@ package agencia
 
 import (
 	"context"
+	"os"
 	"testing"
 
+	"github.com/joho/godotenv"
 	"github.com/robbyriverside/agencia/agents"
 )
 
-type MockRegistry struct {
-	*Registry
-}
-
-func (m *MockRegistry) CallAI(ctx context.Context, agent *agents.Agent, prompt string, tmplCtx any) (string, error) {
-	return "sheet_size: 3x5", nil
-}
-
 func TestProcessAgentMemory(t *testing.T) {
+	// ctx := context.Background()
+	_ = godotenv.Load()
+
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
+	}
 	// Define a simple agent with one fact
 	agent := &agents.Agent{
 		Name: "printer",
@@ -35,18 +35,17 @@ func TestProcessAgentMemory(t *testing.T) {
 			"printer": agent,
 		},
 	}
-	mockReg := &MockRegistry{Registry: reg}
 
 	// Create a chat and bind it to the registry
 	chat := NewChat("printer")
 	reg.Chat = chat
-
+	run := NewRun(reg, chat)
 	// Simulate input/output for fact extraction
 	input := "Please print on a small card."
 	output := "Sure, I will use 3x5 card size for printing."
 
 	// Process memory
-	chat.ProcessAgentMemory(context.Background(), mockReg, agent, input, output)
+	run.ExtractAgentMemory(context.Background(), agent, input, output)
 
 	// Validate facts stored
 	wantKey := "printer.sheet_size"

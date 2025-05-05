@@ -23,6 +23,7 @@ type Chat struct {
 	// TaggedObservations map[string][]string
 	TaggedFacts map[string][]string // tag => list of agent.fact keys
 	Registry    *Registry
+	Cards       []*TraceCard
 }
 
 func NewChat(agent string) *Chat {
@@ -83,7 +84,9 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				log.Println("Unexpected WebSocket error:", err)
+				if !(strings.Contains(err.Error(), "1005") || strings.Contains(err.Error(), "1006")) { // Ignore these close codes
+					log.Println("Unexpected WebSocket error:", err)
+				}
 			}
 			break
 		}
@@ -93,12 +96,8 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		// Optionally echo the message back
 		input := string(msg)
 		ctx := context.Background()
-		resp := defaultChat.Registry.Run(ctx, defaultChat.Agent, input)
-
-		agent := defaultChat.Registry.Agents[defaultChat.Agent]
-		if agent != nil {
-			defaultChat.ProcessAgentMemory(ctx, defaultChat.Registry, agent, input, resp)
-		}
+		// run := NewChatRun(registry, defaultChat)
+		resp, _ := registry.Run(ctx, defaultChat.Agent, input)
 
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(resp)); err != nil {
 			log.Println("WebSocket write error:", err)
@@ -108,10 +107,14 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ProcessAgentMemory is called after an agent runs to allow post-processing of input/output for memory storage.
+// ExtractAgentMemory is called after an agent runs to allow post-processing of input/output for memory storage.
 // Extracts facts using AI and stores them in chat memory.
-func (c *Chat) ProcessAgentMemory(ctx context.Context, r RegistryCaller, agent *agents.Agent, input, output string) {
+func (r *RunContext) ExtractAgentMemory(ctx context.Context, agent *agents.Agent, input, output string) {
 	if len(agent.Facts) == 0 {
+		return
+	}
+	c := r.Chat
+	if c == nil {
 		return
 	}
 
@@ -137,7 +140,7 @@ func (c *Chat) ProcessAgentMemory(ctx context.Context, r RegistryCaller, agent *
 	// Use agent description and mock function to call AI
 	resp, err := r.CallAI(ctx, &agents.Agent{
 		Description: "Extract structured facts from input and output text.",
-	}, prompt, nil)
+	}, prompt)
 	if err != nil {
 		log.Printf("[FACTS] AI call failed: %v", err)
 		return
