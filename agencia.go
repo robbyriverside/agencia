@@ -101,8 +101,8 @@ func RegisterAgents(spec AgentSpec) (*Registry, error) {
 		for name, agent := range spec.Agents {
 			agent.Name = name
 			registry.Agents[name] = &agent
-			if (agent.Function != nil && agent.Template != "") || (agent.Function != nil && agent.Prompt != "") || (agent.Template != "" && agent.Prompt != "") {
-				return nil, fmt.Errorf("agent '%s' has more than one of Function, Template, and Prompt set", name)
+			if !agent.IsValid() {
+				return nil, fmt.Errorf("agent '%s' must be one of Function, Alias, Template, and Prompt", name)
 			}
 		}
 	}

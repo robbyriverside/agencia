@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -16,6 +18,8 @@ import (
 	"github.com/robbyriverside/agencia/utils"
 	"gopkg.in/yaml.v3"
 )
+
+const maxCallDepth = 6 // safeguard against runaway .Get or alias recursion
 
 type AgentNotFoundError struct {
 	AgentName string
@@ -80,7 +84,11 @@ type TraceCard struct {
 	LocalFacts  map[string]any // local facts set by this agent
 }
 
-func (r *RunContext) NewTraceCard(agent, input string, prior *TraceCard) *TraceCard {
+func (c *TraceCard) String() string {
+	return fmt.Sprintf("Agent: %s\nInput: \"%s\"\nOutput: \"%s\"\nInputs: %v\nFacts: %v\nLocalFacts: %v", c.AgentName, c.Input, c.Output, c.Inputs, c.Facts, c.LocalFacts)
+}
+
+func (r *RunContext) NewTraceCard(agent, input string) *TraceCard {
 	card := &TraceCard{
 		AgentName:   agent,
 		Input:       input,
@@ -91,10 +99,48 @@ func (r *RunContext) NewTraceCard(agent, input string, prior *TraceCard) *TraceC
 		Facts:       make(map[string]any, 0),
 		LocalFacts:  make(map[string]any, 0),
 	}
-	if r.Card != nil {
-		r.Card.BranchCards = append(r.Card.BranchCards, card)
-	}
 	return card
+}
+
+func (c *TraceCard) SaveMarkdown(filename string) error {
+	f, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("[TRACE CARD ERROR] Failed to create file: %v", err)
+	}
+	defer f.Close()
+
+	c.WriteMarkdown(f)
+	if err != nil {
+		return fmt.Errorf("[TRACE CARD ERROR] Failed to write to file: %v", err)
+	}
+	return nil
+}
+
+func (c *TraceCard) WriteMarkdown(w io.Writer) {
+	if c == nil {
+		return
+	}
+	fmt.Fprintf(w, "# Agent Trace: %s\n", c.AgentName)
+
+	c.WriteMarkdownLevel(w, 1, 1)
+}
+
+func (c *TraceCard) WriteMarkdownLevel(w io.Writer, index, level int) {
+	if c == nil {
+		return
+	}
+
+	var from string
+	if level > 1 {
+		from = fmt.Sprintf(" From: %s\n", c.PriorCard.AgentName)
+	}
+	fmt.Fprintf(w, "\n## %d.%d: %s%s\n", level, index, c.AgentName, from)
+
+	fmt.Fprintf(w, "```\n%s\n```", c.String())
+
+	for i, card := range c.BranchCards {
+		card.WriteMarkdownLevel(w, i+1, level+1)
+	}
 }
 
 func (r *RunContext) Errorf(format string, args ...any) {
@@ -116,6 +162,7 @@ type RunContext struct {
 	Chat     *Chat
 	Registry *Registry
 	Card     *TraceCard
+	Depth    int            // current depth of nested CallAgent invocations
 	Facts    map[string]any // All facts in this run (local)
 }
 
@@ -181,14 +228,29 @@ func (r *Registry) RunPrint(ctx context.Context, name string, input string) erro
 	if IsVerbose() {
 		card := run.Card
 		if card != nil {
-			// TODO: print card trace (with branches)
+			card.WriteMarkdown(os.Stdout)
 		}
 	}
 	return nil
 }
 
 func (r *RunContext) CallAgent(ctx context.Context, name string, input string) AgentResult {
-	r.Card = r.NewTraceCard(name, input, r.Card)
+	// recursion guard
+	if r.Depth >= maxCallDepth {
+		return AgentResult{
+			Ran:       false,
+			Error:     fmt.Errorf("recursive agent calls exceeded %d", maxCallDepth),
+			AgentName: name,
+		}
+	}
+	r.Depth++
+	defer func() { r.Depth-- }()
+
+	card := r.NewTraceCard(name, input)
+	if r.Card != nil {
+		r.Card.BranchCards = append(r.Card.BranchCards, card)
+	}
+	r.Card = card
 	agent, err := r.Registry.LookupAgent(name)
 	if err != nil {
 		return AgentResult{Ran: false, Error: err, AgentName: name}
@@ -197,16 +259,22 @@ func (r *RunContext) CallAgent(ctx context.Context, name string, input string) A
 		return r.CallAgent(ctx, agent.Alias, input)
 	}
 
+	var result AgentResult
 	switch {
 	case agent.Function != nil:
-		return r.execFunctionAgent(ctx, agent, input, name)
+		result = r.execFunctionAgent(ctx, agent, input, name)
 	case agent.Template != "":
-		return r.execTemplateAgent(ctx, agent, input, name)
+		result = r.execTemplateAgent(ctx, agent, input, name)
 	case agent.Prompt != "":
-		return r.execPromptAgent(ctx, agent, input, name)
+		result = r.execPromptAgent(ctx, agent, input, name)
 	default:
 		return AgentResult{Ran: false, Error: errors.New("invalid agent: no prompt, template, alias, or function"), AgentName: name}
 	}
+	r.Card.Output = result.Output
+	if card.PriorCard != nil {
+		r.Card = card.PriorCard // may be nil for top‑level
+	}
+	return result
 }
 
 func (r *RunContext) extractAgentValues(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
@@ -282,6 +350,9 @@ func (r *RunContext) parseAgentFacts(agent *agents.Agent, input string) (map[str
 }
 
 func (r *RunContext) handleAgentInputs(ctx context.Context, agent *agents.Agent, input string) (map[string]any, error) {
+	if len(agent.Inputs) == 0 {
+		return nil, nil
+	}
 	promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
 	for k, arg := range agent.Inputs {
 		required := "optional"
@@ -293,8 +364,6 @@ func (r *RunContext) handleAgentInputs(ctx context.Context, agent *agents.Agent,
 	promptDesc += `
 Respond ONLY with a valid YAML object that matches the above field descriptions. 
 Do not include markdown formatting or any explanation. 
-If a required field cannot be reasonably inferred from the input, respond with:
-ERROR: missing required field <name>
 
 Example:
 
@@ -334,6 +403,9 @@ note: Have a nice day.
 }
 
 func (r *RunContext) handleAgentFacts(ctx context.Context, agent *agents.Agent, input string) error {
+	if len(agent.Facts) == 0 {
+		return nil
+	}
 	promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
 	for k, arg := range agent.Facts {
 		scope := "global"
@@ -392,6 +464,9 @@ func (r *RunContext) execFunctionAgent(ctx context.Context, agent *agents.Agent,
 	inputMap, err := r.handleAgentInputs(ctx, agent, input)
 	if err != nil {
 		return AgentResult{Ran: false, Error: err, AgentName: name}
+	}
+	if inputMap == nil {
+		return AgentResult{Ran: false, Output: "", AgentName: name, Error: errors.New("Function agent requires inputs")}
 	}
 	resp, err := agent.Function(ctx, inputMap)
 	if err != nil {

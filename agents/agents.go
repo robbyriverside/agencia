@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/template"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -41,7 +40,29 @@ type Agent struct {
 	Procedure   []string
 }
 
-var MockTemplates = map[string]*template.Template{}
+// IsValid if the agent has only one of the following:
+// - Function
+// - Template
+// - Prompt
+// - Alias
+// This is used to determine if the agent is valid for use in the registry.
+func (r *Agent) IsValid() bool {
+	var score int
+	if r.Function != nil {
+		score++
+	}
+	if r.Template != "" {
+		score++
+	}
+	if r.Prompt != "" {
+		score++
+	}
+	if r.Alias != "" {
+		score++
+	}
+	return score == 1
+}
+
 var openaiClient *openai.Client
 
 // var openaiInitError error

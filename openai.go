@@ -84,7 +84,8 @@ func (r *RunContext) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt
 	}
 
 	req := openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
+		Model:       openai.GPT4o,
+		Temperature: 0.2,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleUser, Content: prompt},
 		},
@@ -163,9 +164,10 @@ func (r *RunContext) handleToolCalls(ctx context.Context, prompt string, tools [
 	messages = append(messages, functionResults...)
 
 	contReq := openai.ChatCompletionRequest{
-		Model:    openai.GPT4o,
-		Messages: messages,
-		Tools:    tools,
+		Model:       openai.GPT4o,
+		Temperature: 0.2,
+		Messages:    messages,
+		Tools:       tools,
 	}
 
 	client, err := agents.GetOpenAIClient()
