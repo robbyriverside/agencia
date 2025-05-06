@@ -77,6 +77,8 @@ type TraceCard struct {
 	Input       string
 	Inputs      map[string]any
 	Output      string
+	Error       error
+	Ran         bool
 	PriorCard   *TraceCard
 	BranchCards []*TraceCard
 	Logs        []*LogMessage
@@ -85,7 +87,61 @@ type TraceCard struct {
 }
 
 func (c *TraceCard) String() string {
-	return fmt.Sprintf("Agent: %s\nInput: \"%s\"\nOutput: \"%s\"\nInputs: %v\nFacts: %v\nLocalFacts: %v", c.AgentName, c.Input, c.Output, c.Inputs, c.Facts, c.LocalFacts)
+	errstr := "no error"
+	if c.Error != nil {
+		errstr = fmt.Sprintf("Error: %s\n", c.Error)
+	}
+	ranstr := "did not run"
+	if c.Ran {
+		ranstr = "agent ran"
+	}
+	inputs := fmt.Sprintf("%v", c.Inputs)
+	inputs = inputs[4 : len(inputs)-1]
+	facts := fmt.Sprintf("%v", c.Facts)
+	facts = facts[4 : len(facts)-1]
+	locals := fmt.Sprintf("%v", c.LocalFacts)
+	locals = locals[4 : len(locals)-1]
+	if len(locals) == 0 {
+		locals = "none"
+	} else {
+		locals = fmt.Sprintf("%q", locals)
+	}
+	if len(facts) == 0 {
+		facts = "none"
+	} else {
+		facts = fmt.Sprintf("%q", facts)
+	}
+	if len(inputs) == 0 {
+		inputs = "none"
+	} else {
+		inputs = fmt.Sprintf("%q", inputs)
+	}
+
+	results := fmt.Sprintf("Agent: %s\nInput: \"%s\"\nOutput: \"%s\"\n%s\n%s\nInputs: %s\nFacts: %s\nLocalFacts: %s",
+		c.AgentName, c.Input, c.Output, ranstr, errstr, inputs, facts, locals)
+
+	if len(c.Logs) == 0 {
+		results += "\nno logs"
+	} else {
+		results += "\nLogs:"
+	}
+	for _, log := range c.Logs {
+		results += fmt.Sprintf("\n  %s: %s", log.Timestamp.Format(time.RFC3339), log.Message)
+	}
+	return results
+}
+
+func (c *TraceCard) ShortString() string {
+	errstr := "no error"
+	if c.Error != nil {
+		errstr = fmt.Sprintf("Error: %s\n", c.Error)
+	}
+	prior := "none"
+	if c.PriorCard != nil {
+		prior = c.PriorCard.AgentName
+	}
+	return fmt.Sprintf("Agent: %s\nFrom: %s\nInput: \"%s\"\nOutput: \"%s\"\n%s",
+		c.AgentName, prior, c.Input, c.Output, errstr)
 }
 
 func (r *RunContext) NewTraceCard(agent, input string) *TraceCard {
@@ -102,22 +158,26 @@ func (r *RunContext) NewTraceCard(agent, input string) *TraceCard {
 	return card
 }
 
-func (c *TraceCard) SaveMarkdown(filename string) error {
+func (c *TraceCard) SaveMarkdown(filename string, short ...bool) error {
 	f, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("[TRACE CARD ERROR] Failed to create file: %v", err)
 	}
 	defer f.Close()
 
-	c.WriteMarkdown(f)
+	c.WriteMarkdown(f, short...)
 	if err != nil {
 		return fmt.Errorf("[TRACE CARD ERROR] Failed to write to file: %v", err)
 	}
 	return nil
 }
 
-func (c *TraceCard) WriteMarkdown(w io.Writer) {
+func (c *TraceCard) WriteMarkdown(w io.Writer, short ...bool) {
 	if c == nil {
+		return
+	}
+	if len(short) > 0 && short[0] {
+		c.WriteMarkdownShort(w, 1, 1)
 		return
 	}
 	fmt.Fprintf(w, "# Agent Trace: %s\n", c.AgentName)
@@ -136,10 +196,21 @@ func (c *TraceCard) WriteMarkdownLevel(w io.Writer, index, level int) {
 	}
 	fmt.Fprintf(w, "\n## %d.%d: %s%s\n", level, index, c.AgentName, from)
 
-	fmt.Fprintf(w, "```\n%s\n```", c.String())
+	fmt.Fprintf(w, "\n```%s\n```\n", c.String()) // TODO: add from, level, index
 
 	for i, card := range c.BranchCards {
 		card.WriteMarkdownLevel(w, i+1, level+1)
+	}
+}
+
+func (c *TraceCard) WriteMarkdownShort(w io.Writer, index, level int) {
+	if c == nil {
+		return
+	}
+	fmt.Fprintf(w, "\n```\nLevel: %d.%d\n%s\n```", level, index, c.ShortString()) // TODO: add from, level, index
+
+	for i, card := range c.BranchCards {
+		card.WriteMarkdownShort(w, i+1, level+1)
 	}
 }
 
@@ -225,12 +296,11 @@ func (r *Registry) RunPrint(ctx context.Context, name string, input string) erro
 		out = strings.ToValidUTF8(out, "�")
 	}
 	fmt.Println(out)
-	if IsVerbose() {
-		card := run.Card
-		if card != nil {
-			card.WriteMarkdown(os.Stdout)
-		}
+	card := run.Card
+	if card != nil {
+		card.SaveMarkdown("trace.md", !IsVerbose())
 	}
+
 	return nil
 }
 
@@ -271,6 +341,8 @@ func (r *RunContext) CallAgent(ctx context.Context, name string, input string) A
 		return AgentResult{Ran: false, Error: errors.New("invalid agent: no prompt, template, alias, or function"), AgentName: name}
 	}
 	r.Card.Output = result.Output
+	r.Card.Ran = result.Ran
+	r.Card.Error = result.Error
 	if card.PriorCard != nil {
 		r.Card = card.PriorCard // may be nil for top‑level
 	}

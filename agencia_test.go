@@ -390,7 +390,8 @@ agents:
 	out, card := reg.Run(context.Background(), "start", "hello")
 	assert.Equal(t, "DONE", strings.TrimSpace(out))
 	require.NotNil(t, card)
-	var buf strings.Builder
-	card.WriteMarkdown(&buf)
-	t.Logf("Trace card:\n%s", buf.String())
+	card.SaveMarkdown("complex_test.md")
+	// var buf strings.Builder
+	// card.WriteMarkdown(&buf)
+	// t.Logf("Trace card:\n%s", buf.String())
 }
