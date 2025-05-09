@@ -58,9 +58,33 @@ func TestCircularAlias(t *testing.T) {
 
 	const spec = `
 agents:
+  whoopsy:
+     description: "I am whoopsy"
+     template: "I am whoopsy {{ .Get \"loopy\" }}"
+  soupy:
+    description: "I am soupy"
+    template: "I am soupy {{ .Get \"whoopsy\" }}"
   loopy:
-    alias: "loopy"
+    alias: "soupy"
 `
+	result := LintSpecFile([]byte(spec))
+	t.Logf("### Response: %s", result.Summary)
+	if len(result.Errors) > 0 {
+		for _, err := range result.Errors {
+			t.Log(err)
+		}
+	}
+	if len(result.Warnings) > 0 {
+		for _, warn := range result.Warnings {
+			t.Log(warn)
+		}
+	}
+	if result.Valid {
+		t.Error("Expected invalid spec due to invalid fact scope")
+	}
+	if len(result.Errors) == 0 {
+		t.Error("Expected error for invalid fact scope")
+	}
 	_, err := NewRegistry(spec)
 	require.Error(t, err, "expected NewRegistry to fail on circular alias")
 }

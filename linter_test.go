@@ -313,6 +313,8 @@ agents:
 func TestLintSpecFile_DuplicateAgents(t *testing.T) {
 	yaml := `---
 agents:
+# comment
+
   greet:
     description: First greeting
     prompt: |
@@ -335,7 +337,7 @@ agents:
 		}
 	}
 	if result.Valid {
-		t.Error("Expected invalid spec due to duplicate agent names")
+		t.Error("Expected invalid spec due to duplicate agent names", result.Errors)
 	}
 	found := false
 	for _, err := range result.Errors {

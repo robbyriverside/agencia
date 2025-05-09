@@ -37,6 +37,7 @@ func LintSpecFile(source []byte) LintResult {
 	var warnings []string
 	agentNames := map[string]bool{}
 	usedAgents := map[string]bool{}
+	referencedAgents := map[string]bool{}
 	definedAgents := map[string]*yaml.Node{}
 
 	// Locate top-level "agents" mapping with defensive traversal
@@ -105,9 +106,12 @@ func LintSpecFile(source []byte) LintResult {
 						if !agentNames[refAgent] && !strings.Contains(refAgent, ".") {
 							errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s' references undefined agent '%s' via .%s. Please ensure all referenced agents exist.", val.Line, name, refAgent, match[1]))
 						} else {
-							usedAgents[refAgent] = true
+							referencedAgents[refAgent] = true
 						}
 					}
+				}
+				if key == "alias" && val.Value == name {
+					errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s' is an alias that references itself. This creates an infinite loop.", val.Line, name))
 				}
 			case "description":
 				hasDescription = true
@@ -174,6 +178,34 @@ func LintSpecFile(source []byte) LintResult {
 		}
 	}
 
+	// Recursively trace aliases to mark all referenced agents as used
+	visited := map[string]bool{}
+	var markAliasTargets func(agent string)
+	markAliasTargets = func(agent string) {
+		if visited[agent] {
+			return
+		}
+		visited[agent] = true
+		node, ok := definedAgents[agent]
+		if !ok {
+			return
+		}
+		for i := 0; i < len(node.Content)-1; i += 2 {
+			key := node.Content[i].Value
+			val := node.Content[i+1]
+			if key == "alias" {
+				target := val.Value
+				if target != agent {
+					referencedAgents[target] = true
+					markAliasTargets(target)
+				}
+			}
+		}
+	}
+	for name := range definedAgents {
+		markAliasTargets(name)
+	}
+
 	// After processing agents, check usedAgents that are listeners for description and inputs
 	for usedAgentName := range usedAgents {
 		if agentNode, ok := definedAgents[usedAgentName]; ok {
@@ -192,6 +224,11 @@ func LintSpecFile(source []byte) LintResult {
 				errors = append(errors, fmt.Sprintf("Problem: Agent '%s' is used as a listener but is missing description or inputs, making it invalid as a listener.", usedAgentName))
 			}
 		}
+	}
+
+	// Merge referencedAgents into usedAgents so that agents referenced by .Get/.Start/alias are not marked as unused
+	for ref := range referencedAgents {
+		usedAgents[ref] = true
 	}
 
 	// Detect unused agents
