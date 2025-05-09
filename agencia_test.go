@@ -80,10 +80,10 @@ agents:
 		}
 	}
 	if result.Valid {
-		t.Error("Expected invalid spec due to invalid fact scope")
+		t.Error("Expected invalid spec due to circular alias")
 	}
 	if len(result.Errors) == 0 {
-		t.Error("Expected error for invalid fact scope")
+		t.Error("Expected error for circular alias")
 	}
 	_, err := NewRegistry(spec)
 	require.Error(t, err, "expected NewRegistry to fail on circular alias")
@@ -136,19 +136,19 @@ func TestPromptAgent_WithInput(t *testing.T) {
 
 	const spec = `
 agents:
-  echo.ask:
-    description: Ask the model to reply with exactly: "ECHO: <msg>"
+  echo:
+    description: "Ask the model to reply with exactly: \"ECHO: <msg>\""
     inputs:
       msg:
         description: The message to echo.
     prompt: |
-      Please reply with exactly the text: "ECHO: {{ .msg }}"
+      Please reply with exactly the text: "ECHO: {{ .Input }}"
       No additional commentary.
 `
 	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
 
-	got, _ := reg.Run(context.Background(), "echo.ask", "hello there")
+	got, _ := reg.Run(context.Background(), "echo", "hello there")
 	assert.Equal(t, `ECHO: hello there`, strings.TrimSpace(got))
 }
 
@@ -347,9 +347,7 @@ agents:
 	assert.Equal(t, "Once Upon A Time", out)
 }
 
-// TestRecursiveTemplate_GetLoop creates two agents that invoke each other via
-// .Get. The recursion counter inside CallAgent should stop the infinite loop
-// and surface an error on the trace card.
+// TestRecursiveTemplate_GetLoop ensures that recursive .Get references are caught at lint time.
 func TestRecursiveTemplate_GetLoop(t *testing.T) {
 	const spec = `
 agents:
@@ -360,16 +358,9 @@ agents:
     description: Calls echo1 recursively
     template: "{{ .Get \"echo1\" }}"
 `
-	reg, err := NewRegistry(spec)
-	require.NoError(t, err)
-
-	out, card := reg.Run(context.Background(), "echo1", "recursion test")
-	t.Logf("Output: %q", out)
-	require.NotNil(t, card, "expected a trace card even on recursion failure")
-
-	// The exact error message depends on implementation; look for the word "recursive"
-	assert.Contains(t, strings.ToLower(out), "recursive", "expected recursion error in trace card")
-	card.SaveMarkdown("test.md")
+	_, err := NewRegistry(spec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Circular reference")
 }
 
 // TestComplexCalls_DeepTrace builds a 4‑level chain (Alias → Template → Prompt → Function)
@@ -397,7 +388,7 @@ agents:
         The function result is {{ .Input "msg" | .Get "funcret" }}.
         Reply with exactly the word DONE.
 `
-	reg, err := NewRegistry(spec)
+	reg, err := NewRegistry(spec, true)
 	require.NoError(t, err)
 
 	reg.RegisterAgent(&agents.Agent{

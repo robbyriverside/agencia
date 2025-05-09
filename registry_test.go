@@ -56,12 +56,13 @@ func TestFunctionAgentWithInputs(t *testing.T) {
 	t.Run("missing required value", func(t *testing.T) {
 		for i := 0; i < loopCount; i++ {
 			t.Run(fmt.Sprintf("run %d", i), func(t *testing.T) {
-				res := NewRun(reg, nil).CallAgent(ctx, "test_func", "b: optional\n")
-				t.Logf("Run %d: %+v", i, res.Error)
-				assert.False(t, res.Ran)
-				if assert.Error(t, res.Error) {
-					assert.Contains(t, res.Error.Error(), "a")
+				res, trace := reg.Run(ctx, "test_func", "b: optional\n")
+				if trace.Error != nil {
+					trace.WriteMarkdown(os.Stdout)
 				}
+				t.Logf("Result %d: %s", i, res)
+				// res := NewRun(reg, nil).CallAgent(ctx, "test_func", "b: optional\n")
+				assert.Contains(t, res, "Required field A")
 			})
 		}
 	})

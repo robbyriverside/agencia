@@ -18,6 +18,22 @@ type LintResult struct {
 	Summary  string
 }
 
+func (r LintResult) Result() string {
+	var result string
+	for _, err := range r.Errors {
+		result += fmt.Sprintf("Error: %s\n", err)
+	}
+	for _, warn := range r.Warnings {
+		result += fmt.Sprintf("Warning: %s\n", warn)
+	}
+	if r.Valid {
+		result += "The spec is valid.\n"
+	} else {
+		result += "The spec is invalid.\n"
+	}
+	return result
+}
+
 func LintSpecFile(source []byte) LintResult {
 	var errors []string
 	duplicateErrors := checkDuplicateAgentNames(source)
@@ -91,7 +107,9 @@ func LintSpecFile(source []byte) LintResult {
 		kindSet := map[string]bool{}
 		hasDescription := false
 		var hasInputs bool
+		var inputsNode *yaml.Node
 		var listenersNode *yaml.Node
+		var factsNode *yaml.Node
 		for i := 0; i < len(node.Content)-1; i += 2 {
 			key := node.Content[i].Value
 			val := node.Content[i+1]
@@ -117,6 +135,7 @@ func LintSpecFile(source []byte) LintResult {
 				hasDescription = true
 			case "inputs":
 				hasInputs = true
+				inputsNode = val
 			case "listeners":
 				listenersNode = val
 			case "job":
@@ -128,6 +147,7 @@ func LintSpecFile(source []byte) LintResult {
 					}
 				}
 			case "facts":
+				factsNode = val
 				// Validate scope field of declared facts
 				if val.Kind == yaml.SequenceNode {
 					for _, factNode := range val.Content {
@@ -143,6 +163,44 @@ func LintSpecFile(source []byte) LintResult {
 								}
 							}
 						}
+					}
+				}
+			}
+		}
+
+		// Check inputs descriptions
+		if inputsNode != nil && inputsNode.Kind == yaml.SequenceNode {
+			for _, inputNode := range inputsNode.Content {
+				if inputNode.Kind == yaml.MappingNode {
+					hasDesc := false
+					for j := 0; j < len(inputNode.Content)-1; j += 2 {
+						key := inputNode.Content[j].Value
+						if key == "description" {
+							hasDesc = true
+							break
+						}
+					}
+					if !hasDesc {
+						errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s' has an input missing a required 'description' field.", inputNode.Line, name))
+					}
+				}
+			}
+		}
+
+		// Check facts descriptions
+		if factsNode != nil && factsNode.Kind == yaml.SequenceNode {
+			for _, factNode := range factsNode.Content {
+				if factNode.Kind == yaml.MappingNode {
+					hasDesc := false
+					for j := 0; j < len(factNode.Content)-1; j += 2 {
+						key := factNode.Content[j].Value
+						if key == "description" {
+							hasDesc = true
+							break
+						}
+					}
+					if !hasDesc {
+						errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s' has a fact missing a required 'description' field.", factNode.Line, name))
 					}
 				}
 			}
@@ -238,14 +296,108 @@ func LintSpecFile(source []byte) LintResult {
 		}
 	}
 
-	// Detect self-recursive agents
+	// Detect self-recursive agents using referenceRegex
 	for name, node := range definedAgents {
 		for i := 0; i < len(node.Content)-1; i += 2 {
 			key := node.Content[i].Value
 			val := node.Content[i+1]
-			if (key == "prompt" || key == "template") && strings.Contains(val.Value, name) {
-				errors = append(errors, fmt.Sprintf("Problem: on line %d: Agent '%s' references itself (perhaps indirectly). This can cause an infinite loop that never returns.", val.Line, name))
+			if key == "prompt" || key == "template" {
+				matches := referenceRegex.FindAllStringSubmatch(val.Value, -1)
+				for _, match := range matches {
+					refAgent := match[2]
+					if refAgent == name {
+						errors = append(errors, fmt.Sprintf("Problem: on line %d: Agent '%s' references itself (perhaps indirectly). This can cause an infinite loop that never returns.", val.Line, name))
+					}
+				}
 			}
+		}
+	}
+
+	// Build reference graph for full cycle detection
+	// graph maps agent name to list of referenced agent names
+	graph := map[string][]string{}
+	for name, node := range definedAgents {
+		var refs []string
+		for i := 0; i < len(node.Content)-1; i += 2 {
+			key := node.Content[i].Value
+			val := node.Content[i+1]
+			if key == "prompt" || key == "template" {
+				matches := referenceRegex.FindAllStringSubmatch(val.Value, -1)
+				for _, match := range matches {
+					refAgent := match[2]
+					if agentNames[refAgent] {
+						refs = append(refs, refAgent)
+					}
+				}
+			}
+			if key == "alias" {
+				refAgent := val.Value
+				if agentNames[refAgent] {
+					refs = append(refs, refAgent)
+				}
+			}
+			if key == "job" {
+				for _, item := range val.Content {
+					if agentNames[item.Value] {
+						refs = append(refs, item.Value)
+					}
+				}
+			}
+			if key == "listeners" {
+				for _, item := range val.Content {
+					if agentNames[item.Value] {
+						refs = append(refs, item.Value)
+					}
+				}
+			}
+		}
+		graph[name] = refs
+	}
+
+	// Detect cycles using DFS
+	visitedCycle := map[string]bool{}
+	recStack := map[string]bool{}
+	var cyclePath []string
+	var dfs func(string) bool
+	dfs = func(agent string) bool {
+		if recStack[agent] {
+			cyclePath = append(cyclePath, agent)
+			return true
+		}
+		if visitedCycle[agent] {
+			return false
+		}
+		visitedCycle[agent] = true
+		recStack[agent] = true
+		for _, neighbor := range graph[agent] {
+			if dfs(neighbor) {
+				cyclePath = append(cyclePath, agent)
+				return true
+			}
+		}
+		recStack[agent] = false
+		return false
+	}
+
+	for agent := range graph {
+		cyclePath = nil
+		if dfs(agent) {
+			// Reverse cyclePath to get proper order
+			for i, j := 0, len(cyclePath)-1; i < j; i, j = i+1, j-1 {
+				cyclePath[i], cyclePath[j] = cyclePath[j], cyclePath[i]
+			}
+			// Find start of cycle in path
+			start := 0
+			for i := 1; i < len(cyclePath); i++ {
+				if cyclePath[i] == cyclePath[0] {
+					start = i
+					break
+				}
+			}
+			cycle := cyclePath[:start+1]
+			errors = append(errors, fmt.Sprintf("Problem: Circular reference detected among agents: %s", strings.Join(cycle, " -> ")))
+			// Report only first cycle found
+			break
 		}
 	}
 

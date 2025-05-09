@@ -259,11 +259,11 @@ func (r *Registry) Run(ctx context.Context, name string, input string) (string, 
 	res := run.CallAgent(ctx, name, input)
 	if res.Error != nil {
 		logs.Error("[AGENT ERROR] %v", res.Error)
-		return "", run.Card
+		return res.Error.Error(), run.Card
 	}
 	if !res.Ran {
 		logs.Info("[INFO] Agent '%s' did not run (skipped).", res.AgentName)
-		return "", run.Card
+		return "did not run", run.Card
 	}
 	out := res.Output
 	if !utf8.ValidString(out) {

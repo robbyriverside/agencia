@@ -309,6 +309,38 @@ agents:
 		t.Error("Expected error for invalid fact scope")
 	}
 }
+func TestLintSpecFile_MissingDescription(t *testing.T) {
+	yaml := `---
+agents:
+  agent1:
+    inputs:
+      name:
+        type: int
+    description: Agent with invalid fact scope
+    prompt: Hello
+    facts:
+      - name: testFact
+        scope: invalidScope
+`
+	result := LintSpecFile([]byte(yaml))
+	t.Logf("### Response: %s", result.Summary)
+	if len(result.Errors) > 0 {
+		for _, err := range result.Errors {
+			t.Logf("Error: %s", err)
+		}
+	}
+	if len(result.Warnings) > 0 {
+		for _, warn := range result.Warnings {
+			t.Logf("Warning: %s", warn)
+		}
+	}
+	if result.Valid {
+		t.Error("Expected invalid spec due to invalid fact scope")
+	}
+	if len(result.Errors) == 0 {
+		t.Error("Expected error for invalid fact scope")
+	}
+}
 
 func TestLintSpecFile_DuplicateAgents(t *testing.T) {
 	yaml := `---

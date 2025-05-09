@@ -65,11 +65,13 @@ func LoadRegistry(specfile string) (*Registry, error) {
 	return registry, nil
 }
 
-func NewRegistry(spec string) (*Registry, error) {
+func NewRegistry(spec string, nolint ...bool) (*Registry, error) {
 	specBytes := []byte(spec)
-	res := LintSpecFile(specBytes)
-	if !res.Valid {
-		return nil, errors.New(res.Summary)
+	if len(nolint) == 0 || len(nolint) > 0 && !nolint[0] {
+		res := LintSpecFile(specBytes)
+		if !res.Valid {
+			return nil, errors.New(res.Result())
+		}
 	}
 	agentSpec, err := loadAgentSpec(specBytes)
 	if err != nil {

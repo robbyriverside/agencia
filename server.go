@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -69,7 +70,14 @@ func handleRun(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.Background()
 
-	registry, err := NewRegistry(req.Spec)
+	res := LintSpecFile([]byte(req.Spec))
+	if !res.Valid {
+		logs.Error("[RUN ERROR] Invalid request body: %v", err)
+		http.Error(w, fmt.Sprintf("Invalid SPEC: %s", res.Result()), http.StatusBadRequest)
+		return
+	}
+
+	registry, err := NewRegistry(req.Spec, true)
 	if err != nil {
 		logs.Error("[RUN ERROR] registry error: %v", err)
 		http.Error(w, "[RUN ERROR]", http.StatusBadRequest)
