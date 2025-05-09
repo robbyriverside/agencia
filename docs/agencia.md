@@ -11,7 +11,7 @@ which function is called.
 I wanted a more declarative approach where you can see the prompt and it's composition. There’s
 nothing better than Go templates for this purpose.  We use a go-template that composes the
 prompt for the agent.  Go templates are Turing complete, so we have all the power we need to
-compose the prompt.  And if the template evaluates to blank, it skips the agent, allowing flow
+compose the prompt.  And if the template evaluates to blank, a prompt skips calling AI, allowing flow
 control.
 
 There are two primary template calls you can make inside a prompt:  Input and Get.  Input is the
@@ -98,6 +98,11 @@ The greet agent redefines the name input so that it looks for a pilot callsign i
 name. There are a few more features of agents that we will cover.  But this is all you need to
 understand to see the simplicity of using agents.
 
+The template is not just used for generating it's response.  Go-templates are full programming
+language.  This allows templates to hold control logic.  It may talk more directly to a functional
+agent and provide it's own set of inputs.  Prompt templates are usually more focused on what they
+generate, because that is what gets sent to AI.
+
 ## 3. Structured vs Unstructured Input
 
 When AI is able to call a function, that is the unstructured AI/User world calling the structured
@@ -154,12 +159,19 @@ agents:
 
 The Go code convention used for Agencia is to declare a package variable called Agents. This is a
 map of agent names to function agents.  The function agent takes a context arg and a map of
-structured input and returns a string.  
+structured input, the agent, and returns a string.  It's significant that the function is passed
+the agent.  This allows a function to define a new way to call listeners or other things.
 
 Context is passed down the Go calling tree, allowing access to other configuration objects stored
 in the context.  But if you do that, these are no longer pure functions.
 
-## 5. Remembering Facts in Chat
+## 5. Agencia Chat
+
+The chat represents all ephemeral state including, Facts, and Observations.  Facts are structured
+knowledge and Observations are unstructured knowledge.  Observations and their associated Roles,
+are not yet part of Agencia.  Stay tuned.
+
+### 5.1 Remembering Facts in Chat
 
 When using Agencia chat, a session object keeps a set of structured facts stored by the agents.
 Facts are declared on the agent using the facts keyword.  Facts are similar to inputs, in
@@ -196,9 +208,25 @@ agents:
 Once an agent stores the fact, it can be accessed by any agent in the chat and is saved for the
 next time you use the same chat ID.
 
-## 6. Procedures
+### 5.2 Changing the Start Agent
 
-An agent can also declare a procedure, which is a list of agents to call in order, and keeps all the
+Each chat begins with starting agent.  The starter agent is responsible for being the main menu and
+asking for help from other agents.  However, sometimes we need to change the start agent.  What if
+the first thing it reads is that the speaker is french.  It needs to switch to a French speaking
+agent.  
+
+One of the functions that can be called in a template is Start.  For example:
+
+```go-template
+{{ .Start "other.agent" }}
+```
+
+The Start function changes the start agent in the chat.  So the next time the user sends a message
+the "other.agent" will recieve the message.
+
+## 6. Jobs
+
+An agent can also declare a job, which is a list of agents to call in order, and keeps all the
 outputs from prior agents as the context for future agents.  Below is an example:
 
 ```yaml
@@ -208,7 +236,7 @@ agents:
     inputs:
       title:
         description: The title of the book to check out
-    procedure:
+    job:
       - check_book_availability
       - get_library_card
       - check_out_book
@@ -217,12 +245,12 @@ agents:
       You will be notified when it is done.
 ```
 
-Procedures are asynchronous; they run in  the background and notify the user with their result.
+Jobs are asynchronous; they run in  the background and notify the user with their result.
 However, they also return a message immediately, informing the user that the job has started.
 
-The agents in a procedure may save ephemeral facts, which are only available to the procedure. This
+The agents in a job may save ephemeral facts, which are only available to the job. This
 is done using the scope keyword on a fact.  Scope defaults to global, which is how we described
-facts above.  The local scope is saved in an ephemeral context used only inside the procedure.
+facts above.  The local scope is saved in an ephemeral context used only inside the job.
 
 ```yaml
 agents:
@@ -235,7 +263,7 @@ agents:
     inputs:
       title:
         description: The title of the book to check out
-    procedure:
+    job:
       - check_book_availability
       - get_library_card
       - check_out_book
@@ -251,16 +279,16 @@ agents:
       Welcome to our service!
 ```
 
-A procedure agent uses the template or prompt to return the starting message to the user.  If no
-prompt or template is provided, then the procedure returns a standard message: Running
-procedure: <procedure description> and <procedure jobid>.
+A job agent uses the template or prompt to return the starting message to the user.  If no
+prompt or template is provided, then the job returns a standard message: Running
+job: <job job.agent> <job job.description> and <job job.id>.
 
 The user can cancel, pause, or ask about the status of the job.  If they have forgotten the JobID,
-They can ask about the status of all jobs or refer to them by the procedure name.
+They can ask about the status of all jobs or refer to them by the job name.
 
 ## 7. Using Agencia
 
-Agencia is a web service you can find here: https://agencia.dev
+Agencia is a web service you can find here: https://fibberist.com/agencia
 
 The code is open-source and resides here: https://github.com/robbyriverside/agencia
 

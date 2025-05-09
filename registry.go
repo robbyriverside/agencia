@@ -159,6 +159,7 @@ func (r *RunContext) NewTraceCard(agent, input string) *TraceCard {
 }
 
 func (c *TraceCard) SaveMarkdown(filename string, short ...bool) error {
+	log.Println("Saving trace to", filename)
 	f, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("[TRACE CARD ERROR] Failed to create file: %v", err)
@@ -229,19 +230,19 @@ func (r *RunContext) Logf(format string, args ...any) {
 }
 
 type RunContext struct {
-	IsPrint  bool
-	Chat     *Chat
-	Registry *Registry
-	Card     *TraceCard
-	Depth    int            // current depth of nested CallAgent invocations
-	Facts    map[string]any // All facts in this run (local)
+	IsPrint    bool
+	Chat       *Chat
+	Registry   *Registry
+	Card       *TraceCard
+	Depth      int            // current depth of nested CallAgent invocations
+	LocalFacts map[string]any // All facts stored locally during this run
 }
 
 func NewRun(reg *Registry, chat *Chat) *RunContext {
 	return &RunContext{
-		Chat:     chat,
-		Registry: reg,
-		Facts:    map[string]any{},
+		Chat:       chat,
+		Registry:   reg,
+		LocalFacts: map[string]any{},
 	}
 }
 
@@ -270,7 +271,7 @@ func (r *Registry) Run(ctx context.Context, name string, input string) (string, 
 	}
 
 	if defaultChat != nil {
-		agent := defaultChat.Registry.Agents[defaultChat.Agent]
+		agent := defaultChat.Registry.Agents[defaultChat.StartAgent]
 		if agent != nil {
 			run.ExtractAgentMemory(ctx, agent, input, out)
 		}
@@ -526,7 +527,7 @@ note: Have a nice day.
 		r.Card.Facts[k] = v
 	}
 	for k, v := range localMap {
-		r.Facts[k] = v
+		r.LocalFacts[k] = v
 		r.Card.LocalFacts[k] = v
 	}
 	return nil
@@ -540,7 +541,7 @@ func (r *RunContext) execFunctionAgent(ctx context.Context, agent *agents.Agent,
 	if inputMap == nil {
 		return AgentResult{Ran: false, Output: "", AgentName: name, Error: errors.New("Function agent requires inputs")}
 	}
-	resp, err := agent.Function(ctx, inputMap)
+	resp, err := agent.Function(ctx, inputMap, agent)
 	if err != nil {
 		return AgentResult{Ran: true, Error: err, AgentName: name}
 	}
@@ -598,7 +599,7 @@ func (r *RunContext) renderFinalPrompt(ctx context.Context, template string, age
 		return "", fmt.Errorf("template parse error: %w", err)
 	}
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, &TemplateContext{UserInput: input, ctx: ctx, Run: r, Inputs: inputMap})
+	err = tmpl.Execute(&buf, &TemplateContext{ctx: ctx, Agent: agent, UserInput: input, Run: r, inputMap: inputMap})
 	if err != nil {
 		return "", fmt.Errorf("template exec error: %w", err)
 	}

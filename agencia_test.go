@@ -382,7 +382,7 @@ agents:
 		Inputs: map[string]*agents.Argument{
 			"input": {Description: "The input to the function"},
 		},
-		Function: agents.AgentFn(func(ctx context.Context, input map[string]any) (string, error) {
+		Function: agents.AgentFn(func(ctx context.Context, input map[string]any, agent *agents.Agent) (string, error) {
 			return fmt.Sprintf("FUNC: %v", input["input"]), nil
 		}),
 	})
@@ -390,8 +390,38 @@ agents:
 	out, card := reg.Run(context.Background(), "start", "hello")
 	assert.Equal(t, "DONE", strings.TrimSpace(out))
 	require.NotNil(t, card)
-	card.SaveMarkdown("complex_test.md")
+	card.SaveMarkdown("complex_trace.md")
 	// var buf strings.Builder
 	// card.WriteMarkdown(&buf)
 	// t.Logf("Trace card:\n%s", buf.String())
+}
+func TestInputs(t *testing.T) {
+	requireAPI(t)
+
+	const spec = `
+agents:
+  foo:
+     inputs:
+          value: 
+              description: a string that looks like a value.
+     template: "Your number: {{ .Input \"value\" }}"
+  greet:
+    inputs:
+        name:
+            description: name of the current user.
+    template: |
+      {{ .Inputs }}
+      {{ .Inputs "foo" }}
+      Hello, {{ .Input "name" }}!
+      {{ .Get "foo" }}
+`
+	reg, err := NewRegistry(spec)
+	require.NoError(t, err)
+
+	out, card := reg.Run(context.Background(), "greet", "My name is Zaphod and my number is 42")
+	// assert.Equal(t, "DONE", strings.TrimSpace(out))
+	require.NotNil(t, card)
+	assert.Contains(t, out, "Zaphod", "expected extracted name in greeting")
+	assert.Contains(t, out, "42", "expected foo inputs in greeting")
+	card.SaveMarkdown("trace.md")
 }

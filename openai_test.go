@@ -133,7 +133,7 @@ func TestCallOpenAI_EmptyToolOutput(t *testing.T) {
 	reg.RegisterAgent(&agents.Agent{
 		Name:        "silent_tool",
 		Description: "A tool that returns no output.",
-		Function: func(ctx context.Context, input map[string]interface{}) (string, error) {
+		Function: func(ctx context.Context, input map[string]any, agent *agents.Agent) (string, error) {
 			return "", nil
 		},
 		Inputs: map[string]*agents.Argument{

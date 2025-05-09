@@ -79,7 +79,7 @@ var Agents = map[string]*agents.Agent{
 
 	"show_inputs": {
 		Description: "Return the inputs to the agent.",
-		Function: func(ctx context.Context, input map[string]any) (string, error) {
+		Function: func(ctx context.Context, input map[string]any, agent *agents.Agent) (string, error) {
 			return fmt.Sprintf("Inputs: %v", input), nil
 		},
 	},
@@ -266,7 +266,7 @@ func embedText(ctx context.Context, text string) ([]float32, error) {
 	return result, nil
 }
 
-func Search(ctx context.Context, input map[string]any) (string, error) {
+func Search(ctx context.Context, input map[string]any, agent *agents.Agent) (string, error) {
 	queryArg, _ := input["query"].(string)
 	limitStr, _ := input["limit"].(string)
 	limit, _ := strconv.Atoi(limitStr)
@@ -295,9 +295,9 @@ func Search(ctx context.Context, input map[string]any) (string, error) {
 	return strings.Join(results, "\n---\n"), nil
 }
 
-func AnswerWithSources(ctx context.Context, input map[string]any) (string, error) {
+func AnswerWithSources(ctx context.Context, input map[string]any, agent *agents.Agent) (string, error) {
 	input["limit"] = "5"
-	sources, err := Search(ctx, input)
+	sources, err := Search(ctx, input, agent)
 	if err != nil {
 		return "", err
 	}
@@ -306,9 +306,9 @@ func AnswerWithSources(ctx context.Context, input map[string]any) (string, error
 	return agents.CallOpenAI(ctx, prompt)
 }
 
-func ExtractFacts(ctx context.Context, input map[string]any) (string, error) {
+func ExtractFacts(ctx context.Context, input map[string]any, agent *agents.Agent) (string, error) {
 	input["limit"] = "5"
-	sources, err := Search(ctx, input)
+	sources, err := Search(ctx, input, agent)
 	if err != nil {
 		return "", err
 	}

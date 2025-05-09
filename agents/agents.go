@@ -17,7 +17,13 @@ type Argument struct {
 	Description string `yaml:"description"`
 }
 
-type AgentFn func(ctx context.Context, input map[string]any) (string, error)
+type AgentContext interface {
+	Get(name string, optionalInput ...string) string
+	Input(optionalInput ...string) any
+	Start(name string) string
+}
+
+type AgentFn func(ctx context.Context, input map[string]any, agent *Agent) (string, error)
 
 type Fact struct {
 	Name        string
@@ -37,7 +43,8 @@ type Agent struct {
 	Function    AgentFn
 	Listeners   []string
 	Facts       map[string]*Fact
-	Procedure   []string
+	Job         []string
+	Role        string
 }
 
 // IsValid if the agent has only one of the following:
@@ -80,13 +87,16 @@ func GetOpenAIClient() (*openai.Client, error) {
 	return openaiClient, nil
 }
 
+// CallOpenAI calls the OpenAI API with the given prompt and returns the response.
+// Used by library agents to call OpenAI.
 func CallOpenAI(ctx context.Context, prompt string) (string, error) {
 	client, err := GetOpenAIClient()
 	if err != nil {
 		return "[MOCK ERROR: attempted real OpenAI call in test/mock mode]", err
 	}
 	req := openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
+		Model:       openai.GPT4o,
+		Temperature: 0.2,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleUser, Content: prompt},
 		},

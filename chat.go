@@ -17,23 +17,45 @@ import (
 var defaultChat *Chat
 
 type Chat struct {
-	Agent string
-	Facts map[string]any
-	// Observations       map[string][]string
-	// TaggedObservations map[string][]string
-	TaggedFacts map[string][]string // tag => list of agent.fact keys
-	Registry    *Registry
-	Cards       []*TraceCard
+	StartAgent         string
+	Facts              map[string]any
+	Observations       map[string][]string
+	TaggedObservations map[string][]string
+	TaggedFacts        map[string][]string // tag => list of agent.fact keys
+	Registry           *Registry
+	Cards              []*TraceCard
+}
+
+func (c *Chat) SetStartAgent(name string) {
+	c.StartAgent = name
+}
+
+func (c *Chat) IsValidStartAgent(name string) bool {
+	if c.Registry == nil {
+		return false
+	}
+	_, ok := c.Registry.Agents[name]
+	return ok
 }
 
 func NewChat(agent string) *Chat {
 	return &Chat{
-		Agent: agent,
-		Facts: make(map[string]any),
-		// Observations:      make(map[string][]string),
-		// TaggedObservations: make(map[string][]string),
-		TaggedFacts: make(map[string][]string),
+		StartAgent:         agent,
+		Facts:              make(map[string]any),
+		Observations:       make(map[string][]string),
+		TaggedObservations: make(map[string][]string),
+		TaggedFacts:        make(map[string][]string),
 	}
+}
+
+func (c *Chat) NewRegistry(spec string) (*Registry, error) {
+	reg, err := NewRegistry(spec)
+	if err != nil {
+		return nil, err
+	}
+	reg.Chat = c
+	c.Registry = reg
+	return reg, nil
 }
 
 func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +92,7 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	if defaultChat == nil {
 		defaultChat = NewChat(initReq.Agent)
 	} else {
-		defaultChat.Agent = initReq.Agent
+		defaultChat.StartAgent = initReq.Agent
 	}
 	registry, err := NewRegistry(initReq.Spec)
 	if err != nil {
@@ -97,7 +119,7 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		input := string(msg)
 		ctx := context.Background()
 		// run := NewChatRun(registry, defaultChat)
-		resp, _ := registry.Run(ctx, defaultChat.Agent, input)
+		resp, _ := registry.Run(ctx, defaultChat.StartAgent, input)
 
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(resp)); err != nil {
 			log.Println("WebSocket write error:", err)
@@ -110,7 +132,7 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 // ExtractAgentMemory is called after an agent runs to allow post-processing of input/output for memory storage.
 // Extracts facts using AI and stores them in chat memory.
 func (r *RunContext) ExtractAgentMemory(ctx context.Context, agent *agents.Agent, input, output string) {
-	if len(agent.Facts) == 0 {
+	if r == nil || len(agent.Facts) == 0 {
 		return
 	}
 	c := r.Chat

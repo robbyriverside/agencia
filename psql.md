@@ -28,8 +28,10 @@ createdb agencia
 ## 🔐 Connect to PostgreSQL
 
 ```bash
+psql agencia
+
 psql -U postgres
-psql -U your_user -h localhost -p 5432
+psql -U robfarrow -h localhost -p 5432
 
 🔄 General Session Commands
 

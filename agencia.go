@@ -38,7 +38,7 @@ func IsVerbose() bool {
 }
 
 type AgentSpec struct {
-	Agents map[string]agents.Agent `yaml:"agents,omitempty"`
+	Agents map[string]*agents.Agent `yaml:"agents,omitempty"`
 }
 
 type AgentResult struct {
@@ -58,7 +58,7 @@ func LoadRegistry(specfile string) (*Registry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("[LOAD ERROR] %w", err)
 	}
-	registry, err := RegisterAgents(*spec)
+	registry, err := RegisterAgents(spec)
 	if err != nil {
 		return nil, fmt.Errorf("[REGISTER ERROR] %w", err)
 	}
@@ -71,7 +71,7 @@ func NewRegistry(spec string) (*Registry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("[LOAD ERROR] %w", err)
 	}
-	registry, err := RegisterAgents(*agentSpec)
+	registry, err := RegisterAgents(agentSpec)
 	if err != nil {
 		return nil, fmt.Errorf("[REGISTER ERROR] %w", err)
 	}
@@ -95,19 +95,27 @@ func loadAgentSpec(specbytes []byte) (*AgentSpec, error) {
 	return &spec, nil
 }
 
-func RegisterAgents(spec AgentSpec) (*Registry, error) {
+func RegisterAgents(spec *AgentSpec) (*Registry, error) {
 	registry := &Registry{Agents: make(map[string]*agents.Agent)}
 	if spec.Agents != nil {
 		for name, agent := range spec.Agents {
 			agent.Name = name
-			registry.Agents[name] = &agent
+			if agent.Inputs != nil {
+				for k, v := range agent.Inputs {
+					if v.Type == "" {
+						v.Type = "string"
+					}
+					v.Name = k
+				}
+			}
+			registry.Agents[name] = agent
 			if !agent.IsValid() {
 				return nil, fmt.Errorf("agent '%s' must be one of Function, Alias, Template, and Prompt", name)
 			}
 		}
 	}
 	if len(registry.Agents) == 0 {
-		return nil, errors.New("no agents defined")
+		return nil, errors.New("spec did not contain any agents - be sure you have the agents key in the spec file")
 	}
 	return registry, nil
 }

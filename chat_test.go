@@ -3,10 +3,13 @@ package agencia
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/joho/godotenv"
 	"github.com/robbyriverside/agencia/agents"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProcessAgentMemory(t *testing.T) {
@@ -66,4 +69,40 @@ func TestProcessAgentMemory(t *testing.T) {
 	if !tagged {
 		t.Errorf("Expected fact key %s to be tagged with 'cards'", wantKey)
 	}
+}
+
+// TestTemplateStartSwitch verifies that using {{ .Start "agent" }} in a template
+// changes the chat's start agent for the next user message.
+func TestTemplateStartSwitch(t *testing.T) {
+	requireAPI(t)
+
+	const spec = `
+agents:
+  greeter:
+    description: Greets then switches to helper
+    template: "Hi there! {{ .Start \"helper\" }}"
+  helper:
+    description: Responds after becoming the new start agent
+    template: "Helper heard: {{ .Input }}"
+`
+
+	// Chat starts with 'greeter'
+	if defaultChat == nil {
+		defaultChat = NewChat("greeter")
+	}
+	reg, err := defaultChat.NewRegistry(spec)
+	require.NoError(t, err)
+
+	// First call should run greeter and change chat.Start
+	out1, trace := reg.Run(context.Background(), defaultChat.StartAgent, "first")
+	assert.Equal(t, "greeter", trace.AgentName, "chat start agent should helper")
+	trace.SaveMarkdown("trace1.md", true)
+	assert.Contains(t, out1, "Hi there!")
+	assert.Equal(t, "helper", defaultChat.StartAgent, "chat start agent should switch to helper")
+
+	// Second call should now go to helper automatically
+	out2, trace := reg.Run(context.Background(), defaultChat.StartAgent, "second")
+	trace.SaveMarkdown("trace2.md", true)
+	assert.Equal(t, "helper", trace.AgentName, "chat start agent should helper")
+	assert.Equal(t, "Helper heard: second", strings.TrimSpace(out2))
 }

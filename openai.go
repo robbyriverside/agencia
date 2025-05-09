@@ -10,11 +10,13 @@ import (
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/robbyriverside/agencia/utils"
 	"github.com/sashabaranov/go-openai"
+	"gopkg.in/yaml.v3"
 )
 
 type TemplateContext struct {
+	Agent     *agents.Agent
 	UserInput string
-	Inputs    map[string]any
+	inputMap  map[string]any
 	Run       *RunContext
 	ctx       context.Context
 }
@@ -31,21 +33,61 @@ func (t *TemplateContext) Get(name string, optionalInput ...string) string {
 	return res.Output
 }
 
+// Inputs returns the Inputs for the agent.
+// With no agent it returns yaml for the current input values
+// With an agent name it returns the definitions for that agent.
+func (t *TemplateContext) Inputs(optionalInput ...string) string {
+	var agent *agents.Agent
+	if len(optionalInput) == 0 {
+		yamlData, err := yaml.Marshal(t.inputMap)
+		if err != nil {
+			return fmt.Sprintf("Error: Failed to encode inputs as YAML: %v", err)
+		}
+		return fmt.Sprintf("```yaml\n%s```", strings.Replace(string(yamlData), "null", "", -1))
+	} else {
+		name := optionalInput[0]
+		var err error
+		agent, err = t.Run.Registry.LookupAgent(name)
+		if err != nil {
+			return fmt.Sprintf("Error: Agent %q not found", name)
+		}
+	}
+
+	if agent == nil || len(agent.Inputs) == 0 {
+		return ""
+	}
+
+	yamlData, err := yaml.Marshal(agent.Inputs)
+	if err != nil {
+		return fmt.Sprintf("Error: Failed to encode inputs as YAML: %v", err)
+	}
+
+	return fmt.Sprintf("```yaml\n%s```", strings.Replace(string(yamlData), "null", "", -1))
+}
+
 func (t *TemplateContext) Input(optionalInput ...string) any {
 	if len(optionalInput) == 0 {
 		return t.UserInput
 	} else if len(optionalInput) == 1 {
-		return t.Inputs[optionalInput[0]]
+		return t.inputMap[optionalInput[0]]
 	}
 	if len(optionalInput) > 2 {
 		t.Run.Errorf("invalid Input arguments %d < 3  %q", len(optionalInput), optionalInput)
 	}
-	result := t.Inputs[optionalInput[0]]
+	result := t.inputMap[optionalInput[0]]
 	if result == "" {
 		return optionalInput[1]
 	} else {
 		return result
 	}
+}
+
+func (t *TemplateContext) Start(name string) string {
+	if t.Run.Chat.IsValidStartAgent(name) {
+		t.Run.Chat.SetStartAgent(name)
+		return fmt.Sprintf("New Starting Agent: %s", name)
+	}
+	return fmt.Sprintf("Invalid Starting Agent: %s", name)
 }
 
 func (r *RunContext) CallAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {

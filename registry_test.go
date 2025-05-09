@@ -26,7 +26,7 @@ func TestFunctionAgentWithInputs(t *testing.T) {
 	agent := &agents.Agent{
 		Name:        "test_func",
 		Description: "Test function agent with input prompt",
-		Function: func(ctx context.Context, input map[string]any) (string, error) {
+		Function: func(ctx context.Context, input map[string]any, agent *agents.Agent) (string, error) {
 			a, _ := input["a"].(string)
 			b, _ := input["b"].(string)
 			return a + "|" + b, nil
