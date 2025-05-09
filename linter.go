@@ -322,7 +322,15 @@ func validateAgainstSchema(source []byte) []string {
 		return errors
 	}
 	if err := schema.Validate(jsonObj); err != nil {
-		errors = append(errors, fmt.Sprintf("Problem: The spec is invalid. : %v", err))
+		if ve, ok := err.(*jsonschema.ValidationError); ok {
+			for _, cause := range ve.Causes {
+				location := cause.InstanceLocation
+				reason := cause.Message
+				errors = append(errors, fmt.Sprintf("Problem: The spec is invalid at %s: %s", location, reason))
+			}
+		} else {
+			errors = append(errors, fmt.Sprintf("Problem: The spec is invalid: %s", err.Error()))
+		}
 	}
 	return errors
 }

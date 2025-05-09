@@ -67,6 +67,10 @@ func LoadRegistry(specfile string) (*Registry, error) {
 
 func NewRegistry(spec string) (*Registry, error) {
 	specBytes := []byte(spec)
+	res := LintSpecFile(specBytes)
+	if !res.Valid {
+		return nil, errors.New(res.Summary)
+	}
 	agentSpec, err := loadAgentSpec(specBytes)
 	if err != nil {
 		return nil, fmt.Errorf("[LOAD ERROR] %w", err)
