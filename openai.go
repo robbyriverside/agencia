@@ -21,6 +21,27 @@ type TemplateContext struct {
 	ctx       context.Context
 }
 
+func NewTemplateContext(ctx context.Context, agent *agents.Agent, input string, run *RunContext, inputMap map[string]any) *TemplateContext {
+	return &TemplateContext{
+		Agent:     agent,
+		UserInput: input,
+		Run:       run,
+		inputMap:  inputMap,
+		ctx:       ctx,
+	}
+}
+
+func (t *TemplateContext) Fact(name string, optionalInput ...any) any {
+	var result any
+	if len(optionalInput) > 0 {
+		result = optionalInput[0]
+	}
+	if t.Run.Chat == nil {
+		return result
+	}
+	return t.Run.Chat.Fact(name)
+}
+
 func (t *TemplateContext) Get(name string, optionalInput ...string) string {
 	input := t.UserInput
 	if len(optionalInput) > 0 {

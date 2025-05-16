@@ -48,6 +48,16 @@ func NewChat(agent string) *Chat {
 	}
 }
 
+func (c *Chat) Fact(name string) any {
+	if c == nil {
+		return nil
+	}
+	if v, ok := c.Facts[name]; ok {
+		return v
+	}
+	return nil
+}
+
 func (c *Chat) NewRegistry(spec string) (*Registry, error) {
 	reg, err := NewRegistry(spec)
 	if err != nil {

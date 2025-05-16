@@ -1,0 +1,82 @@
+agents:
+
+  nursing:
+    description: "Scheduler for In-home nursing services for seniors"
+    inputs:
+      date:
+        description: "Date for the appointment"
+      time:
+        description: "Time for the appointment"
+      nurse:
+        description: "Nurse's name"
+      address:
+        description: "Home address of the user"
+    template: |
+      I have scheduled your appointment with {{.Input "nurse"}} on {{.Input "date"}} at {{.Input "time"}}. 
+      The appointment will be held at {{.Input "address"}}.
+      If the date and time are not provided, then you can check for next available time slots.
+      If the nurse's name is not provided, then you can check for available nurses in your area.
+    
+
+# doctors appointments - medical expert
+  appointments:
+    description: "Schedule a doctor's appointment"
+    inputs:
+      date:
+        description: "Date for the appointment"
+      time:
+        description: "Time for the appointment"
+      doctor:
+        description: "Doctor's name"
+      location:
+        description: "Location of the appointment"
+    template: |
+      I have scheduled your appointment with {{.Input "doctor"}} on {{.Input "date"}} at {{.Input "time"}}. 
+      The appointment will be held at {{.Input "location"}}. 
+
+# meal shopping - nutrition expert
+# meal prep - cooking expert
+# driving assistance - transportation expert
+# medication - pharmacy expert
+# nursing schedule - nursing expert
+# cognitive check-in - cognitive expert
+
+  mainmenu:
+    facts:
+      information:
+        description: |
+          Collection of partial information shared by the user over time.
+          Collect details naturally and gently, even if you don't have all the information yet.
+          Append new information to the end of this list, but keep the older information intact.
+          This will help you remember the user's preferences and needs.
+        type: list
+    prompt: |
+      You are a personal assistant for seniors. 
+      Seniors call you to get help with the following tasks.:
+      1. Schedule a doctor's appointment
+      1. Schedule in-home nursing care
+
+      If the caller begins talking about something, 
+      don’t redirect — follow along and gently guide 
+      the conversation to gather details as needed.
+
+      Here’s what the user has already told us so far. Use this information to avoid repeating questions or asking irrelevant ones:
+
+      {{ .Fact "information" }}
+
+      This context includes known names, times, places, and services they've mentioned. Use it to figure
+      out what kind of help they need.   
+
+      Pay attention to what kind of appointment the user is asking about.
+      Look at the prior information to see what the user needs.
+
+      User request:
+      {{ .Input  }}
+    listeners:
+      - appointments
+      # - shopping
+      # - mealprep
+      # - driving
+      # - medication
+      - nursing
+      # - cognitive

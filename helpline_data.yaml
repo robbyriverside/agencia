@@ -1,0 +1,20 @@
+scripts:
+  - dialog:
+      - input:  "Hello, I missed my doctor's appointment."
+        output: "I can reschedule your appointment. Who is your doctor?"
+      - input:  "My doctor is Dr. Smith."
+        output: "I can reschedule your appointment with Dr. Smith.  Where is Dr. Smith's office?"
+      - input:  "His office is at 123 Main St."
+        output: "And what would be a good time for you to reschedule?"
+      - input:  "I need it to be on Monday at 10 AM."
+        output: "Your appointment is scheduled."
+
+  - dialog:
+      - input:  "Hello, nurse did not show up today."
+        output: "I can reschedule your appointment. Who is your nurse?"
+      - input:  "My nurse is Lucinda Phillips."
+        output: "I can reschedule your appointment with Lucinda."
+      - input:  "I live at 123 Main St."
+        output: "And what would be a good time for you to reschedule?"
+      - input:  "Tuesday at 9am is our usual time."
+        output: "Your appointment is scheduled."

@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -29,6 +30,10 @@ var (
 func Logger() *zap.SugaredLogger {
 	if logger == nil {
 		InitLogger(os.Getenv("ENV"))
+		if logger == nil {
+			// Fallback to a simple logger if InitLogger failed
+			panic("Logger not initialized")
+		}
 	}
 	return logger
 }
@@ -101,76 +106,86 @@ func InitLogger(env string) {
 
 // Debug uses fmt.Sprint to construct and log a message.
 // Only logs if Options.Verbose is true.
-func Debug(args ...interface{}) {
+func Debug(args ...any) {
+	if args == nil {
+		return
+	}
 	if Options.Verbose {
 		Logger().Debug(args...)
 	}
 }
 
 // Info uses fmt.Sprint to construct and log a message.
-func Info(args ...interface{}) {
+func Info(args ...any) {
 	Logger().Info(args...)
 }
 
 // Warn uses fmt.Sprint to construct and log a message.
-func Warn(args ...interface{}) {
+func Warn(args ...any) {
+	if args == nil {
+		return
+	}
 	Logger().Warn(args...)
 }
 
 // Error uses fmt.Sprint to construct and log a message.
-func Error(args ...interface{}) {
+func Error(args ...any) {
+	if args == nil {
+		return
+	}
+	fmt.Println("------------Error", args)
 	Logger().Error(args...)
 }
 
 // DPanic uses fmt.Sprint to construct and log a message. In development, the logger then panics.
-func DPanic(args ...interface{}) {
+func DPanic(args ...any) {
 	Logger().DPanic(args...)
 }
 
 // Panic uses fmt.Sprint to construct and log a message, then panics.
-func Panic(args ...interface{}) {
+func Panic(args ...any) {
 	Logger().Panic(args...)
 }
 
 // Fatal uses fmt.Sprint to construct and log a message, then calls os.Exit(1).
-func Fatal(args ...interface{}) {
+func Fatal(args ...any) {
 	Logger().Fatal(args...)
 }
 
 // Debugf uses fmt.Sprintf to construct and log a message.
 // Only logs if Options.Verbose is true.
-func Debugf(format string, args ...interface{}) {
+func Debugf(format string, args ...any) {
 	if Options.Verbose {
 		Logger().Debugf(format, args...)
 	}
 }
 
 // Infof uses fmt.Sprintf to construct and log a message.
-func Infof(format string, args ...interface{}) {
+func Infof(format string, args ...any) {
 	Logger().Infof(format, args...)
 }
 
 // Warnf uses fmt.Sprintf to construct and log a message.
-func Warnf(format string, args ...interface{}) {
+func Warnf(format string, args ...any) {
 	Logger().Warnf(format, args...)
 }
 
 // Errorf uses fmt.Sprintf to construct and log a message.
-func Errorf(format string, args ...interface{}) {
+func Errorf(format string, args ...any) {
 	Logger().Errorf(format, args...)
 }
 
 // DPanicf uses fmt.Sprintf to construct and log a message. In development, the logger then panics.
-func DPanicf(format string, args ...interface{}) {
+func DPanicf(format string, args ...any) {
 	Logger().DPanicf(format, args...)
 }
 
 // Panicf uses fmt.Sprintf to construct and log a message, then panics.
-func Panicf(format string, args ...interface{}) {
+func Panicf(format string, args ...any) {
 	Logger().Panicf(format, args...)
 }
 
 // Fatalf uses fmt.Sprintf to construct and log a message, then calls os.Exit(1).
-func Fatalf(format string, args ...interface{}) {
+func Fatalf(format string, args ...any) {
 	Logger().Fatalf(format, args...)
 }

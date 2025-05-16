@@ -77,6 +77,7 @@ type TraceCard struct {
 	Input       string
 	Inputs      map[string]any
 	Output      string
+	Prompt      string
 	Error       error
 	Ran         bool
 	PriorCard   *TraceCard
@@ -106,6 +107,10 @@ func (c *TraceCard) String() string {
 	} else {
 		locals = fmt.Sprintf("%q", locals)
 	}
+	prompt := c.Prompt
+	if len(prompt) > 0 {
+		prompt = fmt.Sprintf("Prompt: %q\n", prompt)
+	}
 	if len(facts) == 0 {
 		facts = "none"
 	} else {
@@ -117,8 +122,8 @@ func (c *TraceCard) String() string {
 		inputs = fmt.Sprintf("%q", inputs)
 	}
 
-	results := fmt.Sprintf("Agent: %s\nInput: \"%s\"\nOutput: \"%s\"\n%s\n%s\nInputs: %s\nFacts: %s\nLocalFacts: %s",
-		c.AgentName, c.Input, c.Output, ranstr, errstr, inputs, facts, locals)
+	results := fmt.Sprintf("Agent: %s\nInput: \"%s\"\nOutput: \"%s\"\n%s%s\n%s\nInputs: %s\nFacts: %s\nLocalFacts: %s",
+		c.AgentName, c.Input, c.Output, prompt, ranstr, errstr, inputs, facts, locals)
 
 	if len(c.Logs) == 0 {
 		results += "\nno logs"
@@ -233,7 +238,7 @@ type RunContext struct {
 	IsPrint    bool
 	Chat       *Chat
 	Registry   *Registry
-	Card       *TraceCard
+	Card       *TraceCard     // prompt used for this run
 	Depth      int            // current depth of nested CallAgent invocations
 	LocalFacts map[string]any // All facts stored locally during this run
 }
@@ -258,11 +263,11 @@ func (r *Registry) Run(ctx context.Context, name string, input string) (string, 
 	run := NewRun(r, defaultChat)
 	res := run.CallAgent(ctx, name, input)
 	if res.Error != nil {
-		logs.Error("[AGENT ERROR] %v", res.Error)
+		// logs.Error("[AGENT ERROR]", res.Error)
 		return res.Error.Error(), run.Card
 	}
 	if !res.Ran {
-		logs.Info("[INFO] Agent '%s' did not run (skipped).", res.AgentName)
+		logs.Info("[INFO] Agent did not run (skipped).", res.AgentName)
 		return "did not run", run.Card
 	}
 	out := res.Output
@@ -479,13 +484,28 @@ func (r *RunContext) handleAgentFacts(ctx context.Context, agent *agents.Agent, 
 	if len(agent.Facts) == 0 {
 		return nil
 	}
+	chat := r.Chat
+	facts := make(map[string]any)
+	if chat != nil {
+		for k := range agent.Facts {
+			val, ok := chat.Facts[k]
+			if !ok {
+				continue
+			}
+			facts[k] = val
+		}
+	}
 	promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
 	for k, arg := range agent.Facts {
 		scope := "global"
 		if arg.Scope == "local" {
 			scope = "local"
 		}
-		promptDesc += fmt.Sprintf("%s: %s (type: %s, %s)\n", k, arg.Description, arg.Type, scope)
+		val, ok := facts[k]
+		if !ok {
+			val = arg.EmptyDefault()
+		}
+		promptDesc += fmt.Sprintf("%s: %s (type: %s, %s) (old: %v)\n", k, arg.Description, arg.Type, scope, val)
 	}
 	promptDesc += `
 Respond ONLY with a valid YAML object that matches the above field descriptions. 
@@ -576,6 +596,7 @@ func (r *RunContext) execPromptAgent(ctx context.Context, agent *agents.Agent, i
 	if finalPrompt == "" {
 		return AgentResult{Ran: false, Output: "", AgentName: name}
 	}
+	r.Card.Prompt = finalPrompt
 	resp, err := r.CallAI(ctx, agent, finalPrompt)
 	if err != nil {
 		return AgentResult{Ran: true, Error: err, AgentName: name}
@@ -599,7 +620,7 @@ func (r *RunContext) renderFinalPrompt(ctx context.Context, template string, age
 		return "", fmt.Errorf("template parse error: %w", err)
 	}
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, &TemplateContext{ctx: ctx, Agent: agent, UserInput: input, Run: r, inputMap: inputMap})
+	err = tmpl.Execute(&buf, NewTemplateContext(ctx, agent, input, r, inputMap))
 	if err != nil {
 		return "", fmt.Errorf("template exec error: %w", err)
 	}

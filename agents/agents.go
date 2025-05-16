@@ -33,6 +33,25 @@ type Fact struct {
 	Tags        []string
 }
 
+func (f *Fact) EmptyDefault() any {
+	if f.Type == "string" {
+		return ""
+	}
+	if f.Type == "int" {
+		return 0
+	}
+	if f.Type == "float" {
+		return 0.0
+	}
+	if f.Type == "bool" {
+		return false
+	}
+	if f.Type == "list" {
+		return []any{}
+	}
+	return nil
+}
+
 type Agent struct {
 	Name        string
 	Description string
