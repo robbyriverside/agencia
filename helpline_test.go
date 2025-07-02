@@ -3,7 +3,6 @@ package agencia
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"testing"
@@ -15,11 +14,17 @@ import (
 func TestHelplineProto(t *testing.T) {
 	requireAPI(t)
 
-	raw, err := os.ReadFile("helpline_spec.yaml")
-	require.NoError(t, err)
-	spec := string(raw)
+	specFiles := []string{"helpline_spec.yaml", "helpline_roles.yaml"}
+	var fullSpec string
+	for _, file := range specFiles {
+		raw, err := os.ReadFile(file)
+		require.NoError(t, err)
+		fullSpec += string(raw) + "\n\n"
+	}
+	spec := fullSpec
+	fmt.Println("Spec loaded:\n", spec)
 
-	data, err := ioutil.ReadFile("helpline_data.yaml")
+	data, err := os.ReadFile("helpline_data.yaml")
 	if err != nil {
 		log.Fatalf("Failed to read file: %v", err)
 	}
@@ -30,7 +35,7 @@ func TestHelplineProto(t *testing.T) {
 		log.Fatalf("Failed to unmarshal YAML: %v", err)
 	}
 
-	tests := root.Scripts[1].Dialog
+	tests := root.Scripts[2].Dialog
 	// Load the spec
 
 	// Chat starts with 'greeter'

@@ -1,18 +1,28 @@
 # Agencia: A Prompt-Centric Platform for Agentic Programming
 
+## 0. Background
+
+These are not atonomous-agents.  The term agentic is widely used to reference atonomous-agents that
+cooperate to perform some modular intelligence function.  But I have no interest in AGI.  I'm not
+seeking to tilt at those windmills.
+
+However, I agree with the notion of agentic modularity as a way of programming using LLMs.  So this
+is about programming and I am a programmer doing a job.  My objective is to use AI to provide new software
+functionality including technical tools like smart research assistant, but also a human friendly user
+interface.  Instead of you figuring out how the software works, the software figures out what you
+need.
+
+Concurrency, is discussed early and often in agentic circles, but to the programmer it's just an
+optimization.  We have plans for using concurrency, it's not the highest priority.  We prefer to
+support a robust programming system for building real applications at the speed of a prototype.
+
+
 ## 1. Introduction
 
-An agentic programming model is just an AI callback function that happens to call AI. After
-studying AutoGen, LangGraph, and CrewAI, the biggest problem is that they hide the prompt. When you
-look at agents in any of these systems, they use a function to compose the prompt. You can't see the
-prompt unless you use an unnamed function.  All you can see is the agent's name, description, and
-which function is called.
-
-I wanted a more declarative approach where you can see the prompt and it's composition. There’s
-nothing better than Go templates for this purpose.  We use a go-template that composes the
-prompt for the agent.  Go templates are Turing complete, so we have all the power we need to
-compose the prompt.  And if the template evaluates to blank, a prompt skips calling AI, allowing flow
-control.
+Agencia is a prompt-programming system.  Prompts are AI context which are composed to ask an LLM
+the right question. Each agent is a function with inputs and outputs.  The language
+is optimized to describe prompt composition.  We use templates containing agentic functions to
+build AI prompts.
 
 There are two primary template calls you can make inside a prompt:  Input and Get.  Input is the
 input from the user.  Get is a call to another agent, replacing its results into the prompt. Input
@@ -20,8 +30,8 @@ is the user input replaced in the prompt.
 
 In Agencia, there is only one functional element:  the agent.  You can call other agents in two
 ways:  directly using Get inside the template, or indirectly using listeners.  A list of agents,
-called listeners, that behave like functions (or tools).  They must have a description so that AI
-can recognize the pattern and call them.  
+called listeners, that behave like functions (or tools).  Listener agents must have a description
+so that AI can recognize the pattern and call them.
 
 The benefit of this approach is that it is an entirely declarative style for building agentic
 systems.  An agent behaves as a pure function with side effects only to save (or memoize) facts.
@@ -52,9 +62,10 @@ agents:
       Hello, {{ .Input }}!
 ```
 
-Notice the only difference is that the prompt keyword becomes template.  You cannot use both at
-once. If we have a case where we don't need AI to determine how to say hello.  A template agent
-answers the greeting more directly.  But that doesn't mean that a template can't call an agent.
+Notice the only difference is that the prompt keyword becomes template.  You cannot use both
+keywords at once. If we have a case where we don't need AI to determine how to say hello.  
+A template agent answers the greeting more directly.  But that doesn't mean that a template 
+can't call an agent.
 
 
 ```yaml
@@ -111,7 +122,7 @@ function agent, which calls a function from the coding library. Like templates, 
 return a string. However, the inputs to the function are structured, so we need a way to define the
 arguments.  
 
-An agent can take an inputs, which is a map of names and descriptions of what goes into that
+An agent can take inputs, which is a map of names and descriptions of what goes into that
 value.  This is just like the arguments for any AI function (aka tool).  This is required for
 function agents and listeners because they both take structured arguments.
 
@@ -286,17 +297,62 @@ job: <job job.agent> <job job.description> and <job job.id>.
 The user can cancel, pause, or ask about the status of the job.  If they have forgotten the JobID,
 They can ask about the status of all jobs or refer to them by the job name.
 
-## 7. Using Agencia
+Here’s a draft section you can add to your Agencia Overview document under a new heading like “Roles and Character Modeling”:
+
+⸻
+
+## 7. Roles and Character Modeling
+
+In Agencia, roles define the character the user is interacting with—distinct from the agents that execute the tasks. A role is a reusable persona that can be assigned to any number of agents, allowing for shared behavior, memory, and expressive consistency. When a user engages in conversation, they perceive the interaction as being with a role or character, even though the underlying logic is driven by specific agents.
+
+What is a Role?
+
+A Role in Agencia is a structured definition of an agent’s character. It includes:
+	•	Name: A human-readable identifier for the role (e.g., “Lucinda”, “Coach”, “Dr. Patel”).
+    •   Whoami: A description of the role skills, history, important facts.
+	•	Personality: A prompt template capturing the role’s voice, tone, and backstory. This can include emotional tone, speech patterns, gender, ethnic background, or fictional memories. It defines how the character speaks and behaves.
+	•	Performance: A prompt template describing the role’s working style. This defines how the character does its job—whether it’s chatty or concise, intuitive or analytical, curious or directive.
+	•	Facts: A memory bank collected from every response the role gives. These are values the system infers from the output of any agent using the role.
+	•	Inputs: A memory bank collected from the structured inputs to any agent using the role. These describe what the role learns from user input over time.
+
+Role Memory and Additive Facts
+
+Facts tied to a role are used to build up a persistent memory of that character. Each fact can optionally be marked as additive (add: true), which affects how values accumulate:
+	•	Strings and lists: New values are appended to the existing memory.
+	•	Numbers: New values are summed.
+	•	Booleans: Additive logic is ignored—they are treated as overwrites.
+
+This allows roles to develop rich internal memories and histories, shaping how they act and speak over time.
+
+Roles vs Agents
+
+Agents are the technical execution units—responsible for performing specific tasks or responding to prompts. A role is the identity that wraps those tasks in personality. Multiple agents can share a single role, meaning the user can speak consistently with a character even as the functional logic varies.
+
+In chat views (such as group chat), the role name is always shown as the sender, even if multiple agents are involved. This reinforces the illusion that the user is speaking with a unified character, not a fragmented system.
+
+Use Case Example
+
+Imagine a role named "Nurse Lucinda" with the personality of a warm, attentive caregiver and a performance style that is cautious, detail-oriented, and empathetic. Several agents—such as schedule_nurse, confirm_appointment, and triage_symptoms—can all adopt this role. The user perceives a single conversation with Lucinda, while behind the scenes, different agents are handling specialized tasks.
+
+Summary
+
+Roles allow Agencia to deliver interactions that feel personal, consistent, and human. They separate the mechanics of task execution from the art of human connection, enabling agents to serve as actors performing under a shared script. This design bridges the gap between structured intelligence and emotional presence—making systems that don’t just work, but feel alive.
+
+⸻
+
+Let me know if you’d like it shortened, diagrammed, or extended with examples.
+
+## 8. Using Agencia
 
 Agencia is a web service you can find here: https://fibberist.com/agencia
 
 The code is open-source and resides here: https://github.com/robbyriverside/agencia
 
-## 8. License
+## 9. License
 
 MIT
 
-## 9. Contact
+## 10. Contact
 
 Rob Farrow
 robbyriverside@gmail.com

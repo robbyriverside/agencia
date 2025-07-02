@@ -17,17 +17,12 @@ type Argument struct {
 	Description string `yaml:"description"`
 }
 
-type AgentContext interface {
-	Get(name string, optionalInput ...string) string
-	Input(optionalInput ...string) any
-	Start(name string) string
-}
-
 type AgentFn func(ctx context.Context, input map[string]any, agent *Agent) (string, error)
 
 type Fact struct {
 	Name        string
 	Description string
+	Add         bool // TODO: add to existing fact or replace it (list and string append, number addition, bool NA)
 	Scope       string
 	Type        string
 	Tags        []string
@@ -63,7 +58,17 @@ type Agent struct {
 	Listeners   []string
 	Facts       map[string]*Fact
 	Job         []string
-	Role        string
+	Role        string // TODO: apply role to agent
+}
+
+type AgentRole struct {
+	Name        string
+	ID          string
+	Facts       map[string]*Fact     // Collected from every response it gave
+	Inputs      map[string]*Argument // Collected from every input it sees
+	Description string
+	Personality string
+	Performance string
 }
 
 // IsValid if the agent has only one of the following:

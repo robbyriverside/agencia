@@ -38,7 +38,8 @@ func IsVerbose() bool {
 }
 
 type AgentSpec struct {
-	Agents map[string]*agents.Agent `yaml:"agents,omitempty"`
+	Agents map[string]*agents.Agent     `yaml:"agents,omitempty"`
+	Roles  map[string]*agents.AgentRole `yaml:"roles,omitempty"`
 }
 
 type AgentResult struct {
@@ -102,7 +103,7 @@ func loadAgentSpec(specbytes []byte) (*AgentSpec, error) {
 }
 
 func RegisterAgents(spec *AgentSpec) (*Registry, error) {
-	registry := &Registry{Agents: make(map[string]*agents.Agent)}
+	registry := &Registry{Agents: make(map[string]*agents.Agent), Roles: make(map[string]*agents.AgentRole)}
 	if spec.Agents != nil {
 		for name, agent := range spec.Agents {
 			agent.Name = name
@@ -122,6 +123,24 @@ func RegisterAgents(spec *AgentSpec) (*Registry, error) {
 	}
 	if len(registry.Agents) == 0 {
 		return nil, errors.New("spec did not contain any agents - be sure you have the agents key in the spec file")
+	}
+	if spec.Roles != nil {
+		for name, role := range spec.Roles {
+			role.ID = name
+			if role.Facts == nil {
+				role.Facts = make(map[string]*agents.Fact)
+			}
+			if role.Inputs == nil {
+				role.Inputs = make(map[string]*agents.Argument)
+			}
+			for k, v := range role.Inputs {
+				if v.Type == "" {
+					v.Type = "string"
+				}
+				v.Name = k
+			}
+			registry.Roles[name] = role
+		}
 	}
 	return registry, nil
 }

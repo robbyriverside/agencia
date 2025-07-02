@@ -24,6 +24,7 @@ type Chat struct {
 	TaggedFacts        map[string][]string // tag => list of agent.fact keys
 	Registry           *Registry
 	Cards              []*TraceCard
+	Conn               *websocket.Conn
 }
 
 func (c *Chat) SetStartAgent(name string) {
@@ -68,6 +69,23 @@ func (c *Chat) NewRegistry(spec string) (*Registry, error) {
 	return reg, nil
 }
 
+func (c *Chat) SendMessageFromAgent(agentName, context, msg string) error {
+	if c == nil || c.Conn == nil {
+		return fmt.Errorf("no websocket connection")
+	}
+	response := map[string]string{
+		"id":      "", // jobs can override this
+		"sender":  agentName,
+		"context": context,
+		"message": msg,
+	}
+	data, err := json.Marshal(response)
+	if err != nil {
+		return err
+	}
+	return c.Conn.WriteMessage(websocket.TextMessage, data)
+}
+
 func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	type ChatInitRequest struct {
 		Agent string `json:"agent"`
@@ -104,6 +122,7 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		defaultChat.StartAgent = initReq.Agent
 	}
+	defaultChat.Conn = conn
 	registry, err := NewRegistry(initReq.Spec)
 	if err != nil {
 		log.Println("Failed to create registry:", err)
@@ -128,14 +147,11 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		// Optionally echo the message back
 		input := string(msg)
 		ctx := context.Background()
+		respondingAgent := defaultChat.StartAgent
 		// run := NewChatRun(registry, defaultChat)
 		resp, _ := registry.Run(ctx, defaultChat.StartAgent, input)
 
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(resp)); err != nil {
-			log.Println("WebSocket write error:", err)
-			conn.Close()
-			break
-		}
+		defaultChat.SendMessageFromAgent(respondingAgent, "update", resp)
 	}
 }
 

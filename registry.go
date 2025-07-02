@@ -3,6 +3,7 @@ package agencia
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +36,7 @@ type RegistryCaller interface {
 
 type Registry struct {
 	Agents map[string]*agents.Agent
+	Roles  map[string]*agents.AgentRole
 	Chat   *Chat
 }
 
@@ -65,6 +67,11 @@ func (r *Registry) LookupAgent(name string) (*agents.Agent, error) {
 		return nil, &AgentNotFoundError{AgentName: name}
 	}
 	return agent, nil
+}
+
+func (r *Registry) LookupRole(name string) (*agents.AgentRole, bool) {
+	val, ok := r.Roles[name]
+	return val, ok
 }
 
 type LogMessage struct {
@@ -109,7 +116,7 @@ func (c *TraceCard) String() string {
 	}
 	prompt := c.Prompt
 	if len(prompt) > 0 {
-		prompt = fmt.Sprintf("Prompt: %q\n", prompt)
+		prompt = fmt.Sprintf("\nPrompt: %q\n", prompt)
 	}
 	if len(facts) == 0 {
 		facts = "none"
@@ -172,9 +179,6 @@ func (c *TraceCard) SaveMarkdown(filename string, short ...bool) error {
 	defer f.Close()
 
 	c.WriteMarkdown(f, short...)
-	if err != nil {
-		return fmt.Errorf("[TRACE CARD ERROR] Failed to write to file: %v", err)
-	}
 	return nil
 }
 
@@ -260,6 +264,15 @@ func (r *Registry) RegisterAgent(agent *agents.Agent) {
 
 // Run is the main entrypoint for calling an agent
 func (r *Registry) Run(ctx context.Context, name string, input string) (string, *TraceCard) {
+	// If input is a JSON object with a "message" key, extract and use only that value
+	if strings.HasPrefix(input, "{") {
+		var tmp map[string]interface{}
+		if err := json.Unmarshal([]byte(input), &tmp); err == nil {
+			if msg, ok := tmp["message"].(string); ok {
+				input = msg
+			}
+		}
+	}
 	run := NewRun(r, defaultChat)
 	res := run.CallAgent(ctx, name, input)
 	if res.Error != nil {
@@ -331,20 +344,36 @@ func (r *RunContext) CallAgent(ctx context.Context, name string, input string) A
 	if err != nil {
 		return AgentResult{Ran: false, Error: err, AgentName: name}
 	}
-	if agent.Alias != "" {
-		return r.CallAgent(ctx, agent.Alias, input)
-	}
 
 	var result AgentResult
-	switch {
-	case agent.Function != nil:
-		result = r.execFunctionAgent(ctx, agent, input, name)
-	case agent.Template != "":
-		result = r.execTemplateAgent(ctx, agent, input, name)
-	case agent.Prompt != "":
-		result = r.execPromptAgent(ctx, agent, input, name)
-	default:
-		return AgentResult{Ran: false, Error: errors.New("invalid agent: no prompt, template, alias, or function"), AgentName: name}
+	if agent.Alias != "" {
+		aliasAgent, err := r.Registry.LookupAgent(agent.Alias)
+		if err != nil {
+			return AgentResult{Ran: false, Error: fmt.Errorf("invalid alias agent: %s", err), AgentName: name}
+		}
+		switch {
+		case aliasAgent.Function != nil:
+			result = r.execFunctionAlias(ctx, agent, aliasAgent, input, name)
+		case aliasAgent.Template != "":
+			result = r.execTemplateAlias(ctx, agent, aliasAgent, input, name)
+		case aliasAgent.Prompt != "":
+			result = r.execPromptAlias(ctx, agent, aliasAgent, input, name)
+		case aliasAgent.Alias != "":
+			return AgentResult{Ran: false, Error: errors.New("invalid alias of an alias agent not allowed"), AgentName: name}
+		default:
+			return AgentResult{Ran: false, Error: errors.New("invalid alias agent: no prompt, template, or function"), AgentName: name}
+		}
+	} else {
+		switch {
+		case agent.Function != nil:
+			result = r.execFunctionAgent(ctx, agent, input, name)
+		case agent.Template != "":
+			result = r.execTemplateAgent(ctx, agent, input, name)
+		case agent.Prompt != "":
+			result = r.execPromptAgent(ctx, agent, input, name)
+		default:
+			return AgentResult{Ran: false, Error: errors.New("invalid agent: no prompt, template, alias, or function"), AgentName: name}
+		}
 	}
 	r.Card.Output = result.Output
 	r.Card.Ran = result.Ran
@@ -403,32 +432,41 @@ func (r *RunContext) parseAgentInputs(agent *agents.Agent, input string) (map[st
 
 // parseAgentInputs parses YAML input into a map and checks if all required fields are present.
 // the input is yaml provided by AI
-func (r *RunContext) parseAgentFacts(agent *agents.Agent, input string) (map[string]any, map[string]any, error) {
+func (r *RunContext) parseAgentFacts(agent *agents.Agent, role *agents.AgentRole, input string) (map[string]any, map[string]any, error) {
 	factMap := make(map[string]any)
 	if err := yaml.Unmarshal([]byte(input), &factMap); err != nil {
 		r.Errorf("cannot read function input as yaml: %w", err)
 	}
 	localMap := make(map[string]any)
-	missing := []string{}
 	for k, arg := range agent.Facts {
-		if _, ok := factMap[k]; !ok {
-			missing = append(missing, k)
-			continue
-		}
 		if arg.Scope == "local" {
-			localMap[arg.Name] = factMap[arg.Name]
-			delete(factMap, arg.Name)
+			localMap[k] = factMap[k]
+			delete(factMap, k)
 		}
 	}
-	if len(missing) > 0 {
-		r.Errorf("required facts missing in agent: %s - %q", agent.Name, missing)
-		// return nil, nil, fmt.Errorf("required inputs missing in agent: %s - %q", agent.Name, missing)
+	if role != nil && role.Facts != nil {
+		for k, arg := range agent.Facts {
+			if arg.Scope == "local" {
+				localMap[k] = factMap[k]
+				delete(factMap, k)
+			}
+		}
 	}
 	return factMap, localMap, nil
 }
 
 func (r *RunContext) handleAgentInputs(ctx context.Context, agent *agents.Agent, input string) (map[string]any, error) {
-	if len(agent.Inputs) == 0 {
+	var role *agents.AgentRole
+	roleInputs := map[string]*agents.Argument{}
+	if agent.Role != "" {
+		var ok bool
+		role, ok = r.Registry.LookupRole(agent.Role)
+		if !ok {
+			return nil, fmt.Errorf("agent role not found: %s", agent.Role)
+		}
+		roleInputs = role.Inputs
+	}
+	if len(agent.Inputs)+len(roleInputs) == 0 {
 		return nil, nil
 	}
 	promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
@@ -438,6 +476,13 @@ func (r *RunContext) handleAgentInputs(ctx context.Context, agent *agents.Agent,
 			required = "required"
 		}
 		promptDesc += fmt.Sprintf("%s: %s (type: %s, %s)\n", k, arg.Description, arg.Type, required)
+	}
+	for k, arg := range roleInputs {
+		if agent.Inputs[k] != nil {
+			r.Errorf("agent input %s conflicts with role input %s", k, arg.Name)
+			continue
+		}
+		promptDesc += fmt.Sprintf("%s: %s (type: %s, %s)\n", k, arg.Description, arg.Type, "optional")
 	}
 	promptDesc += `
 Respond ONLY with a valid YAML object that matches the above field descriptions. 
@@ -457,16 +502,16 @@ greeting: Hello!
 note: Have a nice day.
 `
 
-	resp, err := r.extractAgentValues(ctx, agent, promptDesc)
+	values, err := r.extractAgentValues(ctx, agent, promptDesc)
 	if err != nil {
 		// Retry once with clarification request
 		promptDesc += "\nIf there was an error understanding the request, explain the issue clearly in your YAML response."
-		resp, err = r.extractAgentValues(ctx, agent, promptDesc)
+		values, err = r.extractAgentValues(ctx, agent, promptDesc)
 		if err != nil {
 			return nil, err
 		}
 	}
-	inputMap, err := r.parseAgentInputs(agent, resp)
+	inputMap, err := r.parseAgentInputs(agent, values)
 	if err != nil {
 		return nil, err
 	}
@@ -495,6 +540,20 @@ func (r *RunContext) handleAgentFacts(ctx context.Context, agent *agents.Agent, 
 			facts[k] = val
 		}
 	}
+	var role *agents.AgentRole
+	var ok bool
+	if agent.Role != "" {
+		role, ok = r.Registry.LookupRole(agent.Role)
+		if ok && role.Facts != nil {
+			for k := range role.Facts {
+				val, ok := chat.Facts[k]
+				if !ok {
+					continue
+				}
+				facts[k] = val
+			}
+		}
+	}
 	promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
 	for k, arg := range agent.Facts {
 		scope := "global"
@@ -506,6 +565,19 @@ func (r *RunContext) handleAgentFacts(ctx context.Context, agent *agents.Agent, 
 			val = arg.EmptyDefault()
 		}
 		promptDesc += fmt.Sprintf("%s: %s (type: %s, %s) (old: %v)\n", k, arg.Description, arg.Type, scope, val)
+	}
+	if role != nil && role.Facts != nil {
+		for k, arg := range role.Facts {
+			scope := "global"
+			if arg.Scope == "local" {
+				scope = "local"
+			}
+			val, ok := facts[k]
+			if !ok {
+				val = arg.EmptyDefault()
+			}
+			promptDesc += fmt.Sprintf("%s: %s (type: %s, %s) (old: %v)\n", k, arg.Description, arg.Type, scope, val)
+		}
 	}
 	promptDesc += `
 Respond ONLY with a valid YAML object that matches the above field descriptions. 
@@ -519,8 +591,8 @@ Input:
 Please generate a greeting and optionally add a note.
 
 Fields:
-greeting: the greeting message. (type: string, required)
-note: an optional note to include. (type: string, optional)
+greeting: the greeting message. (type: string, required) (old: "prior fact value")
+note: an optional note to include. (type: string, optional) (old: "prior fact value")
 
 Expected YAML:
 greeting: Hello!
@@ -536,19 +608,27 @@ note: Have a nice day.
 			return err
 		}
 	}
-	factMap, localMap, err := r.parseAgentFacts(agent, resp)
+	factMap, localMap, err := r.parseAgentFacts(agent, role, resp)
 	if err != nil {
 		return err
 	}
 	for k, v := range factMap {
-		if r.Chat != nil {
-			r.Chat.Facts[k] = v
+		name := k
+		if !strings.Contains(k, ".") {
+			// already qualified
+			name = fmt.Sprintf("%s.%s", agent.Name, k)
 		}
-		r.Card.Facts[k] = v
+		r.AssignFact(agent, name, v)
+		r.Card.Facts[name] = v
 	}
 	for k, v := range localMap {
-		r.LocalFacts[k] = v
-		r.Card.LocalFacts[k] = v
+		name := k
+		if !strings.Contains(k, ".") {
+			// already qualified
+			name = fmt.Sprintf("%s.%s", agent.Name, k)
+		}
+		r.AssignLocalFact(agent, name, v)
+		r.Card.LocalFacts[name] = v
 	}
 	return nil
 }
@@ -559,7 +639,7 @@ func (r *RunContext) execFunctionAgent(ctx context.Context, agent *agents.Agent,
 		return AgentResult{Ran: false, Error: err, AgentName: name}
 	}
 	if inputMap == nil {
-		return AgentResult{Ran: false, Output: "", AgentName: name, Error: errors.New("Function agent requires inputs")}
+		return AgentResult{Ran: false, Output: "", AgentName: name, Error: errors.New("function agent requires inputs")}
 	}
 	resp, err := agent.Function(ctx, inputMap, agent)
 	if err != nil {
@@ -589,7 +669,94 @@ func (r *RunContext) execTemplateAgent(ctx context.Context, agent *agents.Agent,
 }
 
 func (r *RunContext) execPromptAgent(ctx context.Context, agent *agents.Agent, input string, name string) AgentResult {
-	finalPrompt, err := r.renderFinalPrompt(ctx, agent.Prompt, agent, input)
+	template := agent.Prompt
+	if agent.Role != "" {
+		role, ok := r.Registry.LookupRole(agent.Role)
+		if ok && role.Description != "" || role.Personality != "" || role.Performance != "" {
+			var personality string
+			var performance string
+			if role.Performance != "" {
+				performance = fmt.Sprintf("\nDiscuss your job with this Performance approach:\n %s\n", role.Performance)
+			}
+			if role.Personality != "" {
+				personality = fmt.Sprintf("\nRespond with this Personality:\n %s\n", role.Personality)
+				template = fmt.Sprintf("%s\n\nYou Are Playing: %s\n%s%s", template, role.ID, personality, performance)
+			}
+		}
+	}
+	finalPrompt, err := r.renderFinalPrompt(ctx, template, agent, input)
+	if err != nil {
+		return AgentResult{Ran: false, Error: err, AgentName: name}
+	}
+	if finalPrompt == "" {
+		return AgentResult{Ran: false, Output: "", AgentName: name}
+	}
+	r.Card.Prompt = finalPrompt
+	resp, err := r.CallAI(ctx, agent, finalPrompt)
+	if err != nil {
+		return AgentResult{Ran: true, Error: err, AgentName: name}
+	}
+	if r.Chat != nil {
+		r.ExtractAgentMemory(ctx, agent, input, resp)
+	}
+	if err := r.handleAgentFacts(ctx, agent, input); err != nil {
+		return AgentResult{Output: resp, Ran: true, Error: err, AgentName: name}
+	}
+	return AgentResult{Output: resp, Ran: true, AgentName: name}
+}
+
+func (r *RunContext) execFunctionAlias(ctx context.Context, agent, alias *agents.Agent, input string, name string) AgentResult {
+	inputMap, err := r.handleAgentInputs(ctx, agent, input)
+	if err != nil {
+		return AgentResult{Ran: false, Error: err, AgentName: name}
+	}
+	if inputMap == nil {
+		return AgentResult{Ran: false, Output: "", AgentName: name, Error: errors.New("function agent requires inputs")}
+	}
+	resp, err := alias.Function(ctx, inputMap, agent)
+	if err != nil {
+		return AgentResult{Ran: true, Error: err, AgentName: name}
+	}
+	if r.Chat != nil {
+		r.ExtractAgentMemory(ctx, agent, input, resp)
+	}
+	if err := r.handleAgentFacts(ctx, agent, input); err != nil {
+		return AgentResult{Output: resp, Ran: true, Error: err, AgentName: name}
+	}
+	return AgentResult{Output: resp, Ran: true, AgentName: name}
+}
+
+func (r *RunContext) execTemplateAlias(ctx context.Context, agent, alias *agents.Agent, input string, name string) AgentResult {
+	finalPrompt, err := r.renderFinalPrompt(ctx, alias.Template, agent, input)
+	if err != nil {
+		return AgentResult{Ran: false, Error: err, AgentName: name}
+	}
+	if r.Chat != nil {
+		r.ExtractAgentMemory(ctx, agent, input, finalPrompt)
+	}
+	if err := r.handleAgentFacts(ctx, agent, input); err != nil {
+		return AgentResult{Output: finalPrompt, Ran: true, Error: err, AgentName: name}
+	}
+	return AgentResult{Output: finalPrompt, Ran: true, AgentName: name}
+}
+
+func (r *RunContext) execPromptAlias(ctx context.Context, agent, alias *agents.Agent, input string, name string) AgentResult {
+	template := alias.Prompt
+	if agent.Role != "" {
+		role, ok := r.Registry.LookupRole(agent.Role)
+		if ok && role.Personality != "" || role.Performance != "" {
+			var personality string
+			var performance string
+			if role.Performance != "" {
+				performance = fmt.Sprintf("\nDiscuss your job with this Performance approach:\n %s\n", role.Performance)
+			}
+			if role.Personality != "" {
+				personality = fmt.Sprintf("\nRespond with this Personality:\n %s\n", role.Personality)
+				template = fmt.Sprintf("%s\n\nYou Are Playing: %s\n%s%s", template, role.ID, personality, performance)
+			}
+		}
+	}
+	finalPrompt, err := r.renderFinalPrompt(ctx, template, agent, input)
 	if err != nil {
 		return AgentResult{Ran: false, Error: err, AgentName: name}
 	}
@@ -625,4 +792,80 @@ func (r *RunContext) renderFinalPrompt(ctx context.Context, template string, age
 		return "", fmt.Errorf("template exec error: %w", err)
 	}
 	return strings.TrimSpace(buf.String()), nil
+}
+
+// AssignFact assigns or updates a fact in the chat's Facts map according to the agent's Fact definition.
+func (r *RunContext) AssignFact(agent *agents.Agent, name string, v any) {
+	if r.Chat == nil {
+		return
+	}
+	fact := agent.Facts[name]
+	if existing, ok := r.Chat.Facts[name]; ok && fact != nil && fact.Add {
+		switch val := existing.(type) {
+		case []any:
+			r.Chat.Facts[name] = append(val, v)
+		case string:
+			r.Chat.Facts[name] = fmt.Sprintf("%s\n%s", val, v)
+		case int:
+			switch v2 := v.(type) {
+			case int:
+				r.Chat.Facts[name] = val + v2
+			case float64:
+				r.Chat.Facts[name] = float64(val) + v2
+			default:
+				r.Chat.Facts[name] = v
+			}
+		case float64:
+			switch v2 := v.(type) {
+			case int:
+				r.Chat.Facts[name] = val + float64(v2)
+			case float64:
+				r.Chat.Facts[name] = val + v2
+			default:
+				r.Chat.Facts[name] = v2
+			}
+		default:
+			r.Chat.Facts[name] = v
+		}
+	} else {
+		r.Chat.Facts[name] = v
+	}
+}
+
+// AssignLocalFact assigns or updates a local fact in the RunContext's LocalFacts map according to the agent's Fact definition.
+func (r *RunContext) AssignLocalFact(agent *agents.Agent, name string, v any) {
+	if r.LocalFacts == nil {
+		r.LocalFacts = make(map[string]any)
+	}
+	fact := agent.Facts[name]
+	if existing, ok := r.LocalFacts[name]; ok && fact != nil && fact.Add {
+		switch val := existing.(type) {
+		case []any:
+			r.LocalFacts[name] = append(val, v)
+		case string:
+			r.LocalFacts[name] = fmt.Sprintf("%s\n%s", val, v)
+		case int:
+			switch v2 := v.(type) {
+			case int:
+				r.LocalFacts[name] = val + v2
+			case float64:
+				r.LocalFacts[name] = float64(val) + v2
+			default:
+				r.LocalFacts[name] = v
+			}
+		case float64:
+			switch v2 := v.(type) {
+			case int:
+				r.LocalFacts[name] = val + float64(v2)
+			case float64:
+				r.LocalFacts[name] = val + v2
+			default:
+				r.LocalFacts[name] = v2
+			}
+		default:
+			r.LocalFacts[name] = v
+		}
+	} else {
+		r.LocalFacts[name] = v
+	}
 }

@@ -18,3 +18,11 @@ scripts:
         output: "And what would be a good time for you to reschedule?"
       - input:  "Tuesday at 9am is our usual time."
         output: "Your appointment is scheduled."
+
+  - dialog:
+      - input:  "Hello, I'm looking for my wife."
+        output: "I can help you with that. Who is your wife?"
+      - input:  "I can't remember her name."
+        output: "Do you have her phone number?"
+      - input:  "I can't think where that would be."
+        output: "What do you remember about her?"

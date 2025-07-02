@@ -39,6 +39,9 @@ func (t *TemplateContext) Fact(name string, optionalInput ...any) any {
 	if t.Run.Chat == nil {
 		return result
 	}
+	if !strings.Contains(name, ".") && t.Agent != nil {
+		name = t.Agent.Name + "." + name
+	}
 	return t.Run.Chat.Fact(name)
 }
 

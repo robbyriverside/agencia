@@ -34,6 +34,26 @@ agents:
       I have scheduled your appointment with {{.Input "doctor"}} on {{.Input "date"}} at {{.Input "time"}}. 
       The appointment will be held at {{.Input "location"}}. 
 
+# doctors appointments - medical expert
+  cognitive:
+    description: "Ask the user about their cognitive health"
+    role: cognitive_evaluator
+    inputs:
+      name:
+        description: "Name of the user"
+        required: false
+    prompt: |
+      Evaluate this user input.  Ask a series of questions to assess the user's cognitive health.
+      If the user seems confused, ask them to schedule a cognitive check-in.
+      If the user is not confused, then ask them about their cognitive health and how they are
+      feeling.
+
+      This is what the user has told us so far:
+      {{ if .Fact "mainmenu.information" }}
+
+      Use the following information to guide your questions:
+      {{ .Input }}
+
 # meal shopping - nutrition expert
 # meal prep - cooking expert
 # driving assistance - transportation expert
@@ -47,28 +67,33 @@ agents:
         description: |
           Collection of partial information shared by the user over time.
           Collect details naturally and gently, even if you don't have all the information yet.
-          Append new information to the end of this list, but keep the older information intact.
+          Add each new iten into the list, but keep the older information intact.
           This will help you remember the user's preferences and needs.
         type: list
+        add: true
     prompt: |
       You are a personal assistant for seniors. 
       Seniors call you to get help with the following tasks.:
       1. Schedule a doctor's appointment
-      1. Schedule in-home nursing care
+      2. Schedule in-home nursing care
+      3. Cognative check-in
 
       If the caller begins talking about something, 
       don’t redirect — follow along and gently guide 
       the conversation to gather details as needed.
-
+      {{ if .Fact "information" }}
       Here’s what the user has already told us so far. Use this information to avoid repeating questions or asking irrelevant ones:
-
-      {{ .Fact "information" }}
-
+      {{end}}
+      {{- range $index, $info := .Fact "information"}}
+      - {{ $info }}
+      {{- end -}}
+      {{ if .Fact "information" }}
       This context includes known names, times, places, and services they've mentioned. Use it to figure
       out what kind of help they need.   
-
+      {{end}}
       Pay attention to what kind of appointment the user is asking about.
-      Look at the prior information to see what the user needs.
+      If they seem confused and you can't figure out what they want,
+      schedule a cognitive check-in.
 
       User request:
       {{ .Input  }}
@@ -79,4 +104,4 @@ agents:
       # - driving
       # - medication
       - nursing
-      # - cognitive
+      - cognitive
