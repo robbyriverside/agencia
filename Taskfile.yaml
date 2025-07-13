@@ -18,7 +18,7 @@ tasks:
         if [ -n "$WEB_PROJECT" ]; then
           echo "Building web from \$WEB_PROJECT"
           cd "$WEB_PROJECT"
-          flutter build web
+          flutter build web --debug
           cd -
           mkdir -p web
           cp -r "$WEB_PROJECT/build/web/"* web/

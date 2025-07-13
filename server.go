@@ -23,9 +23,9 @@ type runRequest struct {
 }
 
 type runResponse struct {
-	Output string     `json:"output"`
-	Error  string     `json:"error,omitempty"`
-	Card   *TraceCard `json:"card"`
+	Output string `json:"output"`
+	Error  string `json:"error,omitempty"`
+	// Card   *TraceCard `json:"card"`
 }
 
 func Server(ctx context.Context, url string) {
@@ -83,8 +83,36 @@ func handleRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "[RUN ERROR]", http.StatusBadRequest)
 		return
 	}
-	resp, card := registry.Run(ctx, req.Agent, req.Input)
+
+	resp, _ := registry.Run(ctx, req.Agent, req.Input)
+	logs.Info("[RUN OUTPUT]", resp)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(runResponse{Output: resp, Card: card})
+	json.NewEncoder(w).Encode(runResponse{Output: resp})
+	if err != nil {
+		logs.Error("[RUN ERROR] Failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	// response := runResponse{Output: resp} //, Card: card}
+
+	// // Encode to a buffer first
+	// var buf bytes.Buffer
+	// err = json.NewEncoder(&buf).Encode(response)
+	// if err != nil {
+	// 	logs.Error("[RUN ERROR] Failed to encode response: %v", err)
+	// 	http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	// 	return
+	// }
+
+	// // Print the JSON being written
+	// fmt.Println("[RUN DEBUG] Response being sent:", buf.String())
+
+	// // Write to the actual ResponseWriter
+	// _, writeErr := w.Write(buf.Bytes())
+	// if writeErr != nil {
+	// 	logs.Error("[RUN ERROR] Failed to write response: %v", writeErr)
+	// 	http.Error(w, "Failed to write response", http.StatusInternalServerError)
+	// }
 }

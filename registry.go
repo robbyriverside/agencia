@@ -79,6 +79,9 @@ type LogMessage struct {
 	Timestamp time.Time
 }
 
+// Warning: DO NOT JSON Encode TraceCard directly, as it
+//
+//	may contain a cycle (e.g. recursive calls)
 type TraceCard struct {
 	AgentName   string
 	Input       string
@@ -276,7 +279,7 @@ func (r *Registry) Run(ctx context.Context, name string, input string) (string, 
 	run := NewRun(r, defaultChat)
 	res := run.CallAgent(ctx, name, input)
 	if res.Error != nil {
-		// logs.Error("[AGENT ERROR]", res.Error)
+		logs.Error("[AGENT ERROR]", res.Error)
 		return res.Error.Error(), run.Card
 	}
 	if !res.Ran {
@@ -284,8 +287,12 @@ func (r *Registry) Run(ctx context.Context, name string, input string) (string, 
 		return "did not run", run.Card
 	}
 	out := res.Output
+	// logs.Info("[AGENT OUTPUT]", out)
 	if !utf8.ValidString(out) {
 		out = strings.ToValidUTF8(out, "�")
+	}
+	if strings.TrimSpace(out) == "" {
+		out = "no output"
 	}
 
 	if defaultChat != nil {
