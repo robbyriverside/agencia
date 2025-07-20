@@ -452,7 +452,7 @@ func (r *RunContext) parseAgentFacts(agent *agents.Agent, role *agents.AgentRole
 		}
 	}
 	if role != nil && role.Facts != nil {
-		for k, arg := range agent.Facts {
+		for k, arg := range role.Facts {
 			if arg.Scope == "local" {
 				localMap[k] = factMap[k]
 				delete(factMap, k)
@@ -620,22 +620,46 @@ note: Have a nice day.
 		return err
 	}
 	for k, v := range factMap {
-		name := k
-		if !strings.Contains(k, ".") {
-			// already qualified
-			name = fmt.Sprintf("%s.%s", agent.Name, k)
+		if _, ok := agent.Facts[k]; ok {
+			name := k
+			if !strings.Contains(k, ".") {
+				name = fmt.Sprintf("%s.%s", agent.Name, k)
+			}
+			r.AssignFact(agent, name, v)
+			r.Card.Facts[name] = v
+			continue
 		}
-		r.AssignFact(agent, name, v)
-		r.Card.Facts[name] = v
+		if role != nil && role.Facts != nil {
+			if _, ok := role.Facts[k]; ok {
+				name := k
+				if !strings.Contains(k, ".") {
+					name = fmt.Sprintf("%s.%s", role.ID, k)
+				}
+				r.AssignRoleFact(role, name, v)
+				r.Card.Facts[name] = v
+			}
+		}
 	}
 	for k, v := range localMap {
-		name := k
-		if !strings.Contains(k, ".") {
-			// already qualified
-			name = fmt.Sprintf("%s.%s", agent.Name, k)
+		if _, ok := agent.Facts[k]; ok {
+			name := k
+			if !strings.Contains(k, ".") {
+				name = fmt.Sprintf("%s.%s", agent.Name, k)
+			}
+			r.AssignLocalFact(agent, name, v)
+			r.Card.LocalFacts[name] = v
+			continue
 		}
-		r.AssignLocalFact(agent, name, v)
-		r.Card.LocalFacts[name] = v
+		if role != nil && role.Facts != nil {
+			if _, ok := role.Facts[k]; ok {
+				name := k
+				if !strings.Contains(k, ".") {
+					name = fmt.Sprintf("%s.%s", role.ID, k)
+				}
+				r.AssignRoleLocalFact(role, name, v)
+				r.Card.LocalFacts[name] = v
+			}
+		}
 	}
 	return nil
 }
@@ -845,6 +869,82 @@ func (r *RunContext) AssignLocalFact(agent *agents.Agent, name string, v any) {
 		r.LocalFacts = make(map[string]any)
 	}
 	fact := agent.Facts[name]
+	if existing, ok := r.LocalFacts[name]; ok && fact != nil && fact.Add {
+		switch val := existing.(type) {
+		case []any:
+			r.LocalFacts[name] = append(val, v)
+		case string:
+			r.LocalFacts[name] = fmt.Sprintf("%s\n%s", val, v)
+		case int:
+			switch v2 := v.(type) {
+			case int:
+				r.LocalFacts[name] = val + v2
+			case float64:
+				r.LocalFacts[name] = float64(val) + v2
+			default:
+				r.LocalFacts[name] = v
+			}
+		case float64:
+			switch v2 := v.(type) {
+			case int:
+				r.LocalFacts[name] = val + float64(v2)
+			case float64:
+				r.LocalFacts[name] = val + v2
+			default:
+				r.LocalFacts[name] = v2
+			}
+		default:
+			r.LocalFacts[name] = v
+		}
+	} else {
+		r.LocalFacts[name] = v
+	}
+}
+
+// AssignRoleFact assigns or updates a fact in the chat's Facts map according to the role's Fact definition.
+func (r *RunContext) AssignRoleFact(role *agents.AgentRole, name string, v any) {
+	if r.Chat == nil {
+		return
+	}
+	fact := role.Facts[name]
+	if existing, ok := r.Chat.Facts[name]; ok && fact != nil && fact.Add {
+		switch val := existing.(type) {
+		case []any:
+			r.Chat.Facts[name] = append(val, v)
+		case string:
+			r.Chat.Facts[name] = fmt.Sprintf("%s\n%s", val, v)
+		case int:
+			switch v2 := v.(type) {
+			case int:
+				r.Chat.Facts[name] = val + v2
+			case float64:
+				r.Chat.Facts[name] = float64(val) + v2
+			default:
+				r.Chat.Facts[name] = v
+			}
+		case float64:
+			switch v2 := v.(type) {
+			case int:
+				r.Chat.Facts[name] = val + float64(v2)
+			case float64:
+				r.Chat.Facts[name] = val + v2
+			default:
+				r.Chat.Facts[name] = v2
+			}
+		default:
+			r.Chat.Facts[name] = v
+		}
+	} else {
+		r.Chat.Facts[name] = v
+	}
+}
+
+// AssignRoleLocalFact assigns or updates a local fact in the RunContext's LocalFacts map according to the role's Fact definition.
+func (r *RunContext) AssignRoleLocalFact(role *agents.AgentRole, name string, v any) {
+	if r.LocalFacts == nil {
+		r.LocalFacts = make(map[string]any)
+	}
+	fact := role.Facts[name]
 	if existing, ok := r.LocalFacts[name]; ok && fact != nil && fact.Add {
 		switch val := existing.(type) {
 		case []any:

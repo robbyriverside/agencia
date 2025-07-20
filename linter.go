@@ -55,9 +55,11 @@ func LintSpecFile(source []byte) LintResult {
 	usedAgents := map[string]bool{}
 	referencedAgents := map[string]bool{}
 	definedAgents := map[string]*yaml.Node{}
+	definedRoles := map[string]bool{}
 
 	// Locate top-level "agents" mapping with defensive traversal
 	var agentsNode *yaml.Node
+	var rolesNode *yaml.Node
 	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
 		rootMap := root.Content[0]
 		if rootMap.Kind == yaml.MappingNode {
@@ -65,7 +67,9 @@ func LintSpecFile(source []byte) LintResult {
 				keyNode := rootMap.Content[i]
 				if keyNode.Value == "agents" {
 					agentsNode = rootMap.Content[i+1]
-					break
+				}
+				if keyNode.Value == "roles" {
+					rolesNode = rootMap.Content[i+1]
 				}
 			}
 		}
@@ -99,6 +103,14 @@ func LintSpecFile(source []byte) LintResult {
 		definedAgents[name] = agentValueNode
 	}
 
+	// Collect all defined roles
+	if rolesNode != nil && rolesNode.Kind == yaml.MappingNode {
+		for i := 0; i < len(rolesNode.Content)-1; i += 2 {
+			roleName := rolesNode.Content[i].Value
+			definedRoles[roleName] = true
+		}
+	}
+
 	// Regex to find .Get "agentname" and .Start "agentname"
 	referenceRegex := regexp.MustCompile(`\.(Get|Start)\s+"([^"]+)"`)
 
@@ -110,6 +122,9 @@ func LintSpecFile(source []byte) LintResult {
 		var inputsNode *yaml.Node
 		var listenersNode *yaml.Node
 		var factsNode *yaml.Node
+		var roleName string
+		var roleLine int
+		var aliasName string
 		for i := 0; i < len(node.Content)-1; i += 2 {
 			key := node.Content[i].Value
 			val := node.Content[i+1]
@@ -130,6 +145,9 @@ func LintSpecFile(source []byte) LintResult {
 				}
 				if key == "alias" && val.Value == name {
 					errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s' is an alias that references itself. This creates an infinite loop.", val.Line, name))
+				}
+				if key == "alias" {
+					aliasName = val.Value
 				}
 			case "description":
 				hasDescription = true
@@ -165,6 +183,9 @@ func LintSpecFile(source []byte) LintResult {
 						}
 					}
 				}
+			case "role":
+				roleName = val.Value
+				roleLine = val.Line
 			}
 		}
 
@@ -216,6 +237,28 @@ func LintSpecFile(source []byte) LintResult {
 			// Only add warning if agent is used as a listener
 			if usedAgents[name] {
 				warnings = append(warnings, fmt.Sprintf("Reminder: Line %d: Agent '%s' is missing a description. Consider adding a description to clarify the agent's purpose.", node.Line, name))
+			}
+		}
+
+		if roleName != "" {
+			if !definedRoles[roleName] {
+				errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s' references undefined role '%s'.", roleLine, name, roleName))
+			}
+			if kindSet["template"] || kindSet["function"] {
+				warnings = append(warnings, fmt.Sprintf("Reminder: Line %d: Agent '%s' assigns role '%s' but roles only affect prompt agents.", roleLine, name, roleName))
+			} else if kindSet["alias"] {
+				if aliasNode, ok := definedAgents[aliasName]; ok {
+					aliasKinds := map[string]bool{}
+					for j := 0; j < len(aliasNode.Content)-1; j += 2 {
+						k := aliasNode.Content[j].Value
+						if k == "template" || k == "function" {
+							aliasKinds[k] = true
+						}
+					}
+					if aliasKinds["template"] || aliasKinds["function"] {
+						warnings = append(warnings, fmt.Sprintf("Reminder: Line %d: Agent '%s' assigns role '%s' to alias '%s' which is not a prompt agent.", roleLine, name, roleName, aliasName))
+					}
+				}
 			}
 		}
 
