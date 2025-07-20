@@ -85,6 +85,47 @@
             ]
           }
         }
+      },
+      "roles": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "description": { "type": "string" },
+            "personality": { "type": "string" },
+            "performance": { "type": "string" },
+            "inputs": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": { "type": "string" },
+                  "type": { "type": "string" },
+                  "name": { "type": "string" }
+                },
+                "required": ["description"]
+              }
+            },
+            "facts": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": { "type": "string" },
+                  "scope": { "type": "string", "enum": ["global", "local"] },
+                  "type": { "type": "string" },
+                  "tags": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "add": { "type": "boolean" }
+                },
+                "required": ["description"]
+              }
+            }
+          },
+          "required": []
+        }
       }
     },
     "required": ["agents"]

@@ -418,3 +418,50 @@ agents:
 		t.Error("Expected schema validation error")
 	}
 }
+
+func TestLintSpecFile_RoleWarnings(t *testing.T) {
+	yaml := `---
+agents:
+  a:
+    description: templ agent
+    template: |
+      hi
+    role: r1
+roles:
+  r1:
+    description: role one
+`
+	result := LintSpecFile([]byte(yaml))
+	if len(result.Warnings) == 0 {
+		t.Error("expected warning for role on template agent")
+	}
+	if !result.Valid {
+		t.Errorf("unexpected errors: %v", result.Errors)
+	}
+}
+
+func TestLintSpecFile_RoleUndefined(t *testing.T) {
+	yaml := `---
+agents:
+  a:
+    description: prompt agent
+    prompt: hello
+    role: missing
+roles:
+  r1:
+    description: role one
+`
+	result := LintSpecFile([]byte(yaml))
+	if result.Valid {
+		t.Error("expected invalid spec due to undefined role")
+	}
+	found := false
+	for _, err := range result.Errors {
+		if strings.Contains(err, "undefined role") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected undefined role error, got %v", result.Errors)
+	}
+}
