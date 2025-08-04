@@ -122,6 +122,10 @@
                 },
                 "required": ["description"]
               }
+            },
+            "observations": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
             }
           },
           "required": []
