@@ -178,9 +178,10 @@ in the context.  But if you do that, these are no longer pure functions.
 
 ## 5. Agencia Chat
 
-The chat represents all ephemeral state including, Facts, and Observations.  Facts are structured
-knowledge and Observations are unstructured knowledge.  Observations and their associated Roles,
-are not yet part of Agencia.  Stay tuned.
+The chat represents all ephemeral state including Facts and Observations. Facts are structured
+knowledge and observations are unstructured knowledge gathered according to an agent's roles.
+Each role can declare observations that describe the kind of information to collect, and the chat
+stores the summarized results by role for future use.
 
 ### 5.1 Remembering Facts in Chat
 

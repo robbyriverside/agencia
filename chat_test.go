@@ -93,3 +93,12 @@ agents:
 	assert.Equal(t, "helper", trace.AgentName, "chat start agent should helper")
 	assert.Equal(t, "Helper heard: second", strings.TrimSpace(out2))
 }
+
+func TestChatAddObservation(t *testing.T) {
+	chat := NewChat("test")
+	chat.AddObservation("writer", "preference", "prefers novels to short stories")
+
+	obs := chat.ObservationsByRole("writer")
+	require.NotNil(t, obs)
+	assert.Equal(t, []string{"prefers novels to short stories"}, obs["preference"])
+}

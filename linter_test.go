@@ -465,3 +465,29 @@ roles:
 		t.Errorf("expected undefined role error, got %v", result.Errors)
 	}
 }
+
+func TestLintSpecFile_RoleObservations(t *testing.T) {
+	yaml := `---
+agents:
+  a:
+    description: prompt agent
+    prompt: hello
+    role: r1
+roles:
+  r1:
+    description: role one
+    observations:
+      writing_pref: look for writing preferences
+`
+	result := LintSpecFile([]byte(yaml))
+	if !result.Valid {
+		t.Fatalf("unexpected errors: %v", result.Errors)
+	}
+	spec, err := loadAgentSpec([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected spec load error: %v", err)
+	}
+	if got := spec.Roles["r1"].Observations["writing_pref"]; got != "look for writing preferences" {
+		t.Errorf("unexpected observation description: %v", got)
+	}
+}

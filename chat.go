@@ -63,6 +63,29 @@ func (c *Chat) LoadFacts(facts map[string]any) {
 	c.Facts = facts
 }
 
+// AddObservation stores an observation for the given role and key.
+// Observations are unstructured pieces of knowledge gathered during chat.
+func (c *Chat) AddObservation(role, key, observation string) {
+	if c == nil {
+		return
+	}
+	if c.Observations == nil {
+		c.Observations = make(map[string]map[string][]string)
+	}
+	if _, ok := c.Observations[role]; !ok {
+		c.Observations[role] = make(map[string][]string)
+	}
+	c.Observations[role][key] = append(c.Observations[role][key], observation)
+}
+
+// ObservationsByRole returns the observations for the specified role.
+func (c *Chat) ObservationsByRole(role string) map[string][]string {
+	if c == nil {
+		return nil
+	}
+	return c.Observations[role]
+}
+
 func (c *Chat) NewRegistry(spec string) (*Registry, error) {
 	reg, err := NewRegistry(spec)
 	if err != nil {
@@ -229,8 +252,8 @@ func (r *RunContext) ExtractAgentMemory(ctx context.Context, agent *agents.Agent
 func FactsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(map[string]any{
-		"facts": defaultChat.Facts,
-		// "Observations": defaultChat.Observations,
+		"facts":        defaultChat.Facts,
+		"observations": defaultChat.Observations,
 	})
 	if err != nil {
 		http.Error(w, "failed to encode facts", http.StatusInternalServerError)
