@@ -88,7 +88,7 @@ func handleRun(w http.ResponseWriter, r *http.Request) {
 	logs.Info("[RUN OUTPUT]", resp)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(runResponse{Output: resp})
+	err = json.NewEncoder(w).Encode(runResponse{Output: resp})
 	if err != nil {
 		logs.Error("[RUN ERROR] Failed to encode response: %v", err)
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
