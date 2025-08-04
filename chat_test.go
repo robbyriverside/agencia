@@ -27,7 +27,6 @@ func TestProcessAgentMemory(t *testing.T) {
 				Name:        "sheet_size",
 				Type:        "string",
 				Description: "The size of the paper",
-				Tags:        []string{"cards"},
 			},
 		},
 	}
@@ -56,18 +55,6 @@ func TestProcessAgentMemory(t *testing.T) {
 		t.Errorf("Expected fact %s not found", wantKey)
 	} else if val != "3x5" {
 		t.Errorf("Expected fact value '3x5', got '%v'", val)
-	}
-
-	// Validate tagging
-	tagged := false
-	for _, key := range chat.TaggedFacts["cards"] {
-		if key == wantKey {
-			tagged = true
-			break
-		}
-	}
-	if !tagged {
-		t.Errorf("Expected fact key %s to be tagged with 'cards'", wantKey)
 	}
 }
 

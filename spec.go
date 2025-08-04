@@ -127,18 +127,6 @@ func RegisterAgents(spec *AgentSpec) (*Registry, error) {
 	if spec.Roles != nil {
 		for name, role := range spec.Roles {
 			role.ID = name
-			if role.Facts == nil {
-				role.Facts = make(map[string]*agents.Fact)
-			}
-			if role.Inputs == nil {
-				role.Inputs = make(map[string]*agents.Argument)
-			}
-			for k, v := range role.Inputs {
-				if v.Type == "" {
-					v.Type = "string"
-				}
-				v.Name = k
-			}
 			registry.Roles[name] = role
 		}
 	}

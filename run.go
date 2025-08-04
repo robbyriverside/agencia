@@ -150,31 +150,10 @@ func (r *RunContext) parseAgentFacts(agent *agents.Agent, role *agents.AgentRole
 			delete(factMap, k)
 		}
 	}
-	if role != nil && role.Facts != nil {
-		for k, arg := range role.Facts {
-			if arg.Scope == "local" {
-				localMap[k] = factMap[k]
-				delete(factMap, k)
-			}
-		}
-	}
 	return factMap, localMap, nil
 }
 
 func (r *RunContext) handleAgentInputs(ctx context.Context, agent *agents.Agent, input string) (map[string]any, error) {
-	var role *agents.AgentRole
-	roleInputs := map[string]*agents.Argument{}
-	if agent.Role != "" {
-		var ok bool
-		role, ok = r.Registry.LookupRole(agent.Role)
-		if !ok {
-			return nil, fmt.Errorf("agent role not found: %s", agent.Role)
-		}
-		roleInputs = role.Inputs
-	}
-	if len(agent.Inputs)+len(roleInputs) == 0 {
-		return nil, nil
-	}
 	promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
 	for k, arg := range agent.Inputs {
 		required := "optional"
@@ -182,13 +161,6 @@ func (r *RunContext) handleAgentInputs(ctx context.Context, agent *agents.Agent,
 			required = "required"
 		}
 		promptDesc += fmt.Sprintf("%s: %s (type: %s, %s)\n", k, arg.Description, arg.Type, required)
-	}
-	for k, arg := range roleInputs {
-		if agent.Inputs[k] != nil {
-			r.Errorf("agent input %s conflicts with role input %s", k, arg.Name)
-			continue
-		}
-		promptDesc += fmt.Sprintf("%s: %s (type: %s, %s)\n", k, arg.Description, arg.Type, "optional")
 	}
 	promptDesc += `
 Respond ONLY with a valid YAML object that matches the above field descriptions. 
@@ -247,19 +219,6 @@ func (r *RunContext) handleAgentFacts(ctx context.Context, agent *agents.Agent, 
 		}
 	}
 	var role *agents.AgentRole
-	var ok bool
-	if agent.Role != "" {
-		role, ok = r.Registry.LookupRole(agent.Role)
-		if ok && role.Facts != nil {
-			for k := range role.Facts {
-				val, ok := chat.Facts[k]
-				if !ok {
-					continue
-				}
-				facts[k] = val
-			}
-		}
-	}
 	promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
 	for k, arg := range agent.Facts {
 		scope := "global"
@@ -271,19 +230,6 @@ func (r *RunContext) handleAgentFacts(ctx context.Context, agent *agents.Agent, 
 			val = arg.EmptyDefault()
 		}
 		promptDesc += fmt.Sprintf("%s: %s (type: %s, %s) (old: %v)\n", k, arg.Description, arg.Type, scope, val)
-	}
-	if role != nil && role.Facts != nil {
-		for k, arg := range role.Facts {
-			scope := "global"
-			if arg.Scope == "local" {
-				scope = "local"
-			}
-			val, ok := facts[k]
-			if !ok {
-				val = arg.EmptyDefault()
-			}
-			promptDesc += fmt.Sprintf("%s: %s (type: %s, %s) (old: %v)\n", k, arg.Description, arg.Type, scope, val)
-		}
 	}
 	promptDesc += `
 Respond ONLY with a valid YAML object that matches the above field descriptions. 
@@ -328,16 +274,6 @@ note: Have a nice day.
 			r.Card.Facts[name] = v
 			continue
 		}
-		if role != nil && role.Facts != nil {
-			if _, ok := role.Facts[k]; ok {
-				name := k
-				if !strings.Contains(k, ".") {
-					name = fmt.Sprintf("%s.%s", role.ID, k)
-				}
-				r.AssignRoleFact(role, name, v)
-				r.Card.Facts[name] = v
-			}
-		}
 	}
 	for k, v := range localMap {
 		if _, ok := agent.Facts[k]; ok {
@@ -348,16 +284,6 @@ note: Have a nice day.
 			r.AssignLocalFact(agent, name, v)
 			r.Card.LocalFacts[name] = v
 			continue
-		}
-		if role != nil && role.Facts != nil {
-			if _, ok := role.Facts[k]; ok {
-				name := k
-				if !strings.Contains(k, ".") {
-					name = fmt.Sprintf("%s.%s", role.ID, k)
-				}
-				r.AssignRoleLocalFact(role, name, v)
-				r.Card.LocalFacts[name] = v
-			}
 		}
 	}
 	return nil
@@ -568,82 +494,6 @@ func (r *RunContext) AssignLocalFact(agent *agents.Agent, name string, v any) {
 		r.LocalFacts = make(map[string]any)
 	}
 	fact := agent.Facts[name]
-	if existing, ok := r.LocalFacts[name]; ok && fact != nil && fact.Add {
-		switch val := existing.(type) {
-		case []any:
-			r.LocalFacts[name] = append(val, v)
-		case string:
-			r.LocalFacts[name] = fmt.Sprintf("%s\n%s", val, v)
-		case int:
-			switch v2 := v.(type) {
-			case int:
-				r.LocalFacts[name] = val + v2
-			case float64:
-				r.LocalFacts[name] = float64(val) + v2
-			default:
-				r.LocalFacts[name] = v
-			}
-		case float64:
-			switch v2 := v.(type) {
-			case int:
-				r.LocalFacts[name] = val + float64(v2)
-			case float64:
-				r.LocalFacts[name] = val + v2
-			default:
-				r.LocalFacts[name] = v2
-			}
-		default:
-			r.LocalFacts[name] = v
-		}
-	} else {
-		r.LocalFacts[name] = v
-	}
-}
-
-// AssignRoleFact assigns or updates a fact in the chat's Facts map according to the role's Fact definition.
-func (r *RunContext) AssignRoleFact(role *agents.AgentRole, name string, v any) {
-	if r.Chat == nil {
-		return
-	}
-	fact := role.Facts[name]
-	if existing, ok := r.Chat.Facts[name]; ok && fact != nil && fact.Add {
-		switch val := existing.(type) {
-		case []any:
-			r.Chat.Facts[name] = append(val, v)
-		case string:
-			r.Chat.Facts[name] = fmt.Sprintf("%s\n%s", val, v)
-		case int:
-			switch v2 := v.(type) {
-			case int:
-				r.Chat.Facts[name] = val + v2
-			case float64:
-				r.Chat.Facts[name] = float64(val) + v2
-			default:
-				r.Chat.Facts[name] = v
-			}
-		case float64:
-			switch v2 := v.(type) {
-			case int:
-				r.Chat.Facts[name] = val + float64(v2)
-			case float64:
-				r.Chat.Facts[name] = val + v2
-			default:
-				r.Chat.Facts[name] = v2
-			}
-		default:
-			r.Chat.Facts[name] = v
-		}
-	} else {
-		r.Chat.Facts[name] = v
-	}
-}
-
-// AssignRoleLocalFact assigns or updates a local fact in the RunContext's LocalFacts map according to the role's Fact definition.
-func (r *RunContext) AssignRoleLocalFact(role *agents.AgentRole, name string, v any) {
-	if r.LocalFacts == nil {
-		r.LocalFacts = make(map[string]any)
-	}
-	fact := role.Facts[name]
 	if existing, ok := r.LocalFacts[name]; ok && fact != nil && fact.Add {
 		switch val := existing.(type) {
 		case []any:

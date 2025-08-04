@@ -25,7 +25,6 @@ type Fact struct {
 	Add         bool // TODO: add to existing fact or replace it (list and string append, number addition, bool NA)
 	Scope       string
 	Type        string
-	Tags        []string
 }
 
 func (f *Fact) EmptyDefault() any {
@@ -62,13 +61,12 @@ type Agent struct {
 }
 
 type AgentRole struct {
-	Name        string
-	ID          string
-	Facts       map[string]*Fact     // Collected from every response it gave
-	Inputs      map[string]*Argument // Collected from every input it sees
-	Description string
-	Personality string
-	Performance string
+	Name         string
+	ID           string
+	Description  string
+	Personality  string
+	Performance  string
+	Observations map[string]string // key -> observation
 }
 
 // IsValid if the agent has only one of the following:

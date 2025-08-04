@@ -17,14 +17,12 @@ import (
 var defaultChat *Chat
 
 type Chat struct {
-	StartAgent         string
-	Facts              map[string]any
-	Observations       map[string][]string
-	TaggedObservations map[string][]string
-	TaggedFacts        map[string][]string // tag => list of agent.fact keys
-	Registry           *Registry
-	Cards              []*TraceCard
-	Conn               *websocket.Conn
+	StartAgent   string
+	Facts        map[string]any
+	Observations map[string]map[string][]string
+	Registry     *Registry
+	Cards        []*TraceCard
+	Conn         *websocket.Conn
 }
 
 func (c *Chat) SetStartAgent(name string) {
@@ -41,11 +39,9 @@ func (c *Chat) IsValidStartAgent(name string) bool {
 
 func NewChat(agent string) *Chat {
 	return &Chat{
-		StartAgent:         agent,
-		Facts:              make(map[string]any),
-		Observations:       make(map[string][]string),
-		TaggedObservations: make(map[string][]string),
-		TaggedFacts:        make(map[string][]string),
+		StartAgent:   agent,
+		Facts:        make(map[string]any),
+		Observations: make(map[string]map[string][]string),
 	}
 }
 
@@ -211,7 +207,7 @@ func (r *RunContext) ExtractAgentMemory(ctx context.Context, agent *agents.Agent
 	}
 
 	// Store each fact and tag, with checks for missing/empty/null
-	for k, arg := range agent.Facts {
+	for k := range agent.Facts {
 		key := fmt.Sprintf("%s.%s", agent.Name, k)
 
 		v, ok := result[k]
@@ -226,12 +222,6 @@ func (r *RunContext) ExtractAgentMemory(ctx context.Context, agent *agents.Agent
 
 		c.Facts[key] = v
 		// log.Printf("[FACTS] Stored: %s = %v", key, v)
-
-		if arg.Tags != nil {
-			for _, tag := range arg.Tags {
-				c.TaggedFacts[tag] = append(c.TaggedFacts[tag], key)
-			}
-		}
 	}
 }
 
