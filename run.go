@@ -326,6 +326,7 @@ func (r *RunContext) execTemplateAgent(ctx context.Context, agent *agents.Agent,
 
 func (r *RunContext) execPromptAgent(ctx context.Context, agent *agents.Agent, input string, name string) AgentResult {
 	template := agent.Prompt
+	var obsPrompt string
 	if agent.Role != "" {
 		role, ok := r.Registry.LookupRole(agent.Role)
 		if ok && role.Description != "" || role.Personality != "" || role.Performance != "" {
@@ -339,10 +340,18 @@ func (r *RunContext) execPromptAgent(ctx context.Context, agent *agents.Agent, i
 				template = fmt.Sprintf("%s\n\nYou Are Playing: %s\n%s%s", template, role.ID, personality, performance)
 			}
 		}
+		var err error
+		obsPrompt, err = r.processObservations(ctx, agent, input)
+		if err != nil {
+			r.Errorf("observation processing error: %v", err)
+		}
 	}
 	finalPrompt, err := r.renderFinalPrompt(ctx, template, agent, input)
 	if err != nil {
 		return AgentResult{Ran: false, Error: err, AgentName: name}
+	}
+	if obsPrompt != "" {
+		finalPrompt = obsPrompt + "\n\n" + finalPrompt
 	}
 	if finalPrompt == "" {
 		return AgentResult{Ran: false, Output: "", AgentName: name}
@@ -398,6 +407,7 @@ func (r *RunContext) execTemplateAlias(ctx context.Context, agent, alias *agents
 
 func (r *RunContext) execPromptAlias(ctx context.Context, agent, alias *agents.Agent, input string, name string) AgentResult {
 	template := alias.Prompt
+	var obsPrompt string
 	if agent.Role != "" {
 		role, ok := r.Registry.LookupRole(agent.Role)
 		if ok && role.Personality != "" || role.Performance != "" {
@@ -411,10 +421,18 @@ func (r *RunContext) execPromptAlias(ctx context.Context, agent, alias *agents.A
 				template = fmt.Sprintf("%s\n\nYou Are Playing: %s\n%s%s", template, role.ID, personality, performance)
 			}
 		}
+		var err error
+		obsPrompt, err = r.processObservations(ctx, agent, input)
+		if err != nil {
+			r.Errorf("observation processing error: %v", err)
+		}
 	}
 	finalPrompt, err := r.renderFinalPrompt(ctx, template, agent, input)
 	if err != nil {
 		return AgentResult{Ran: false, Error: err, AgentName: name}
+	}
+	if obsPrompt != "" {
+		finalPrompt = obsPrompt + "\n\n" + finalPrompt
 	}
 	if finalPrompt == "" {
 		return AgentResult{Ran: false, Output: "", AgentName: name}
