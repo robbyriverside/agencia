@@ -59,6 +59,14 @@ func (c *Chat) Fact(name string) any {
 	return nil
 }
 
+// LoadFacts replaces the chat's facts map with the provided one.
+func (c *Chat) LoadFacts(facts map[string]any) {
+	if c == nil {
+		return
+	}
+	c.Facts = facts
+}
+
 func (c *Chat) NewRegistry(spec string) (*Registry, error) {
 	reg, err := NewRegistry(spec)
 	if err != nil {
@@ -237,6 +245,26 @@ func FactsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "failed to encode facts", http.StatusInternalServerError)
 	}
+}
+
+// LoadFactsHandler replaces the chat facts with the provided map.
+func LoadFactsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var payload struct {
+		Facts map[string]any `json:"facts"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if defaultChat == nil {
+		defaultChat = NewChat("")
+	}
+	defaultChat.LoadFacts(payload.Facts)
+	w.WriteHeader(http.StatusOK)
 }
 
 // ExtractYAMLFromMarkdown locates a ```yaml ... ``` block and extracts its content.

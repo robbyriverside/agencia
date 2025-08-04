@@ -45,6 +45,7 @@ func Server(ctx context.Context, url string) {
 	http.HandleFunc("/api/run", handleRun)
 	http.HandleFunc("/api/chat", ChatWebSocketHandler)
 	http.HandleFunc("/api/facts", FactsHandler)
+	http.HandleFunc("/api/loadfacts", LoadFactsHandler)
 
 	log.Fatal(http.ListenAndServe(url, nil))
 }
