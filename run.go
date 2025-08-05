@@ -140,6 +140,7 @@ func (r *RunContext) parseAgentInputs(agent *agents.Agent, input string) (map[st
 // the input is yaml provided by AI
 func (r *RunContext) parseAgentFacts(agent *agents.Agent, role *agents.AgentRole, input string) (map[string]any, map[string]any, error) {
 	factMap := make(map[string]any)
+
 	if err := yaml.Unmarshal([]byte(input), &factMap); err != nil {
 		r.Errorf("cannot read function input as yaml: %w", err)
 	}
@@ -154,6 +155,10 @@ func (r *RunContext) parseAgentFacts(agent *agents.Agent, role *agents.AgentRole
 }
 
 func (r *RunContext) handleAgentInputs(ctx context.Context, agent *agents.Agent, input string) (map[string]any, error) {
+	if len(agent.Inputs) == 0 {
+		return make(map[string]any), nil
+	}
+
 	promptDesc := "Fill out the following YAML fields based on the input. Each value is described and includes a type hint.\n\nInput:\n" + input + "\n\nFields:\n"
 	for k, arg := range agent.Inputs {
 		required := "optional"
