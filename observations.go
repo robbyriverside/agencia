@@ -32,7 +32,7 @@ func (r *RunContext) gatherObservationsFromInput(ctx context.Context, role *agen
 	if err != nil {
 		return nil, err
 	}
-	resp = deleteJSONBlock(resp)
+	resp = deleteMDBlock(resp)
 	obs := make(map[string][]string)
 	if err := json.Unmarshal([]byte(resp), &obs); err != nil {
 		return nil, fmt.Errorf("unmarshal observations JSON: %w. response: %s. prompt: %s", err, resp, prompt)
@@ -53,7 +53,7 @@ func (r *RunContext) mergeObservations(ctx context.Context, existing, incoming m
 	if err != nil {
 		return nil, err
 	}
-	resp = deleteJSONBlock(resp)
+	resp = deleteMDBlock(resp)
 	merged := make(map[string][]string)
 	if err := json.Unmarshal([]byte(resp), &merged); err != nil {
 		return nil, fmt.Errorf("unmarshal merged observations JSON: %w. response: %s. prompt: %s", err, resp, prompt)
@@ -61,9 +61,14 @@ func (r *RunContext) mergeObservations(ctx context.Context, existing, incoming m
 	return merged, nil
 }
 
-// deleteJSONBlock removes the last JSON block from a string, used to clean up AI responses.
-func deleteJSONBlock(resp string) string {
+// deleteMDBlock removes the last JSON or YAML markdown block from a string, used to clean up AI responses.
+func deleteMDBlock(resp string) string {
 	if idx := strings.LastIndex(resp, "```json"); idx != -1 {
+		resp = resp[idx+7:]
+		if idx := strings.LastIndex(resp, "```"); idx != -1 {
+			resp = resp[:idx]
+		}
+	} else if idx := strings.LastIndex(resp, "```yaml"); idx != -1 {
 		resp = resp[idx+7:]
 		if idx := strings.LastIndex(resp, "```"); idx != -1 {
 			resp = resp[:idx]

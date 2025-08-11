@@ -40,7 +40,7 @@ func TestProcessAgentMemory(t *testing.T) {
 
 	// Create a chat and bind it to the registry
 	chat := NewChat("printer")
-	reg.Chat = chat
+	// reg.Chat = chat
 	run := NewRun(reg, chat)
 	// Simulate input/output for fact extraction
 	input := "Please print on a small card."

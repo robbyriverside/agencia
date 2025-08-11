@@ -91,7 +91,7 @@ func (c *Chat) NewRegistry(spec string) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg.Chat = c
+	// reg.Chat = c
 	c.Registry = reg
 	return reg, nil
 }

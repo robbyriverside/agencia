@@ -31,7 +31,6 @@ type RegistryCaller interface {
 type Registry struct {
 	Agents map[string]*agents.Agent
 	Roles  map[string]*agents.AgentRole
-	Chat   *Chat
 }
 
 type Libraries map[string]Registry
