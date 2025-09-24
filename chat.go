@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"encoding/json"
 
@@ -15,6 +16,37 @@ import (
 )
 
 var defaultChat *Chat
+
+type chatSessionStore struct {
+	mu       sync.RWMutex
+	sessions map[*websocket.Conn]*Chat
+}
+
+func newChatSessionStore() *chatSessionStore {
+	return &chatSessionStore{sessions: make(map[*websocket.Conn]*Chat)}
+}
+
+func (s *chatSessionStore) startSession(conn *websocket.Conn, agent string) *Chat {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if chat, ok := s.sessions[conn]; ok {
+		chat.SetStartAgent(agent)
+		chat.Conn = conn
+		return chat
+	}
+	chat := NewChat(agent)
+	chat.Conn = conn
+	s.sessions[conn] = chat
+	return chat
+}
+
+func (s *chatSessionStore) endSession(conn *websocket.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, conn)
+}
+
+var chatSessions = newChatSessionStore()
 
 type Chat struct {
 	StartAgent   string
@@ -114,6 +146,10 @@ func (c *Chat) SendMessageFromAgent(agentName, context, msg string) error {
 }
 
 func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
+	ChatSessionHandler(w, r)
+}
+
+func ChatSessionHandler(w http.ResponseWriter, r *http.Request) {
 	type ChatInitRequest struct {
 		Agent string `json:"agent"`
 		Spec  string `json:"spec"` // optionally store or use this
@@ -142,21 +178,16 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to decode chat init request: %v", err)
 		return
 	}
-	// log.Println("Spec received:\n", initReq.Spec)
+	chat := chatSessions.startSession(conn, initReq.Agent)
+	defer chatSessions.endSession(conn)
+	defaultChat = chat
 
-	if defaultChat == nil {
-		defaultChat = NewChat(initReq.Agent)
-	} else {
-		defaultChat.StartAgent = initReq.Agent
-	}
-	defaultChat.Conn = conn
-	registry, err := NewRegistry(initReq.Spec)
+	registry, err := chat.NewRegistry(initReq.Spec)
 	if err != nil {
 		log.Println("Failed to create registry:", err)
 		http.Error(w, "failed to create registry", http.StatusInternalServerError)
 		return
 	}
-	defaultChat.Registry = registry
 
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -174,11 +205,11 @@ func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		// Optionally echo the message back
 		input := string(msg)
 		ctx := context.Background()
-		respondingAgent := defaultChat.StartAgent
+		respondingAgent := chat.StartAgent
 		// run := NewChatRun(registry, defaultChat)
-		resp, _ := registry.Run(ctx, defaultChat.StartAgent, input)
+		resp, _ := registry.Run(ctx, chat.StartAgent, input)
 
-		defaultChat.SendMessageFromAgent(respondingAgent, "update", resp)
+		chat.SendMessageFromAgent(respondingAgent, "update", resp)
 	}
 }
 
