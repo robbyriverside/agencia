@@ -2,57 +2,81 @@ package agencia
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
 
-	"encoding/json"
-
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/robbyriverside/agencia/agents"
 	"gopkg.in/yaml.v3"
 )
 
-var defaultChat *Chat
-
 type chatSessionStore struct {
-	mu       sync.RWMutex
-	sessions map[*websocket.Conn]*Chat
+	mu        sync.RWMutex
+	sessions  map[string]*Chat
+	connIndex map[*websocket.Conn]*Chat
 }
 
 func newChatSessionStore() *chatSessionStore {
-	return &chatSessionStore{sessions: make(map[*websocket.Conn]*Chat)}
+	return &chatSessionStore{
+		sessions:  make(map[string]*Chat),
+		connIndex: make(map[*websocket.Conn]*Chat),
+	}
 }
 
-func (s *chatSessionStore) startSession(conn *websocket.Conn, agent string) *Chat {
+func (s *chatSessionStore) startSession(conn *websocket.Conn, agent string, registry *Registry) *Chat {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if chat, ok := s.sessions[conn]; ok {
+
+	if chat, ok := s.connIndex[conn]; ok && chat != nil {
+		if chat.ChatID != "" {
+			s.sessions[chat.ChatID] = chat
+		}
 		chat.SetStartAgent(agent)
+		chat.Registry = registry
 		chat.Conn = conn
 		return chat
 	}
-	chat := NewChat(agent)
+
+	chatID := uuid.NewString()
+	chat := NewChat(agent, registry)
+	chat.ChatID = chatID
 	chat.Conn = conn
-	s.sessions[conn] = chat
+	s.sessions[chatID] = chat
+	s.connIndex[conn] = chat
 	return chat
 }
 
 func (s *chatSessionStore) endSession(conn *websocket.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.sessions, conn)
+	if chat, ok := s.connIndex[conn]; ok {
+		delete(s.connIndex, conn)
+		if chat != nil && chat.ChatID != "" {
+			delete(s.sessions, chat.ChatID)
+		}
+	}
+}
+
+func (s *chatSessionStore) get(chatID string) (*Chat, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	chat, ok := s.sessions[chatID]
+	return chat, ok
 }
 
 var chatSessions = newChatSessionStore()
 
 type Chat struct {
+	*Registry
+	ChatID       string
 	StartAgent   string
 	Facts        map[string]any
 	Observations map[string]map[string][]string
-	Registry     *Registry
 	Cards        []*TraceCard
 	Conn         *websocket.Conn
 }
@@ -69,8 +93,9 @@ func (c *Chat) IsValidStartAgent(name string) bool {
 	return ok
 }
 
-func NewChat(agent string) *Chat {
+func NewChat(agent string, registry *Registry) *Chat {
 	return &Chat{
+		Registry:     registry,
 		StartAgent:   agent,
 		Facts:        make(map[string]any),
 		Observations: make(map[string]map[string][]string),
@@ -118,16 +143,6 @@ func (c *Chat) ObservationsByRole(role string) map[string][]string {
 	return c.Observations[role]
 }
 
-func (c *Chat) NewRegistry(spec string) (*Registry, error) {
-	reg, err := NewRegistry(spec)
-	if err != nil {
-		return nil, err
-	}
-	// reg.Chat = c
-	c.Registry = reg
-	return reg, nil
-}
-
 func (c *Chat) SendMessageFromAgent(agentName, context, msg string) error {
 	if c == nil || c.Conn == nil {
 		return fmt.Errorf("no websocket connection")
@@ -143,10 +158,6 @@ func (c *Chat) SendMessageFromAgent(agentName, context, msg string) error {
 		return err
 	}
 	return c.Conn.WriteMessage(websocket.TextMessage, data)
-}
-
-func ChatWebSocketHandler(w http.ResponseWriter, r *http.Request) {
-	ChatSessionHandler(w, r)
 }
 
 func ChatSessionHandler(w http.ResponseWriter, r *http.Request) {
@@ -178,14 +189,22 @@ func ChatSessionHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to decode chat init request: %v", err)
 		return
 	}
-	chat := chatSessions.startSession(conn, initReq.Agent)
-	defer chatSessions.endSession(conn)
-	defaultChat = chat
 
-	registry, err := chat.NewRegistry(initReq.Spec)
+	registry, err := NewRegistry(initReq.Spec)
 	if err != nil {
 		log.Println("Failed to create registry:", err)
 		http.Error(w, "failed to create registry", http.StatusInternalServerError)
+		return
+	}
+
+	chat := chatSessions.startSession(conn, initReq.Agent, registry)
+	defer chatSessions.endSession(conn)
+
+	if err := conn.WriteJSON(map[string]any{
+		"type":    "chat_init",
+		"chat_id": chat.ChatID,
+	}); err != nil {
+		log.Printf("Failed to send chat init message: %v", err)
 		return
 	}
 
@@ -200,14 +219,11 @@ func ChatSessionHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		// fmt.Printf("Received message for agent '%s': %s\n", defaultChat.Agent, msg)
-
 		// Optionally echo the message back
 		input := string(msg)
 		ctx := context.Background()
 		respondingAgent := chat.StartAgent
-		// run := NewChatRun(registry, defaultChat)
-		resp, _ := registry.Run(ctx, chat.StartAgent, input)
+		resp, _ := registry.Run(ctx, chat, chat.StartAgent, input)
 
 		chat.SendMessageFromAgent(respondingAgent, "update", resp)
 	}
@@ -281,10 +297,22 @@ func (r *RunContext) ExtractAgentMemory(ctx context.Context, agent *agents.Agent
 
 // FactsHandler serves the facts and Observations of the current chat session.
 func FactsHandler(w http.ResponseWriter, r *http.Request) {
+	chatID := r.URL.Query().Get("chat_id")
+	if strings.TrimSpace(chatID) == "" {
+		http.Error(w, "chat_id is required", http.StatusBadRequest)
+		return
+	}
+
+	chat, ok := chatSessions.get(chatID)
+	if !ok || chat == nil {
+		http.Error(w, "chat not found", http.StatusNotFound)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(map[string]any{
-		"facts":        defaultChat.Facts,
-		"observations": defaultChat.Observations,
+		"facts":        chat.Facts,
+		"observations": chat.Observations,
 	})
 	if err != nil {
 		http.Error(w, "failed to encode facts", http.StatusInternalServerError)
@@ -297,6 +325,18 @@ func LoadFactsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	chatID := r.URL.Query().Get("chat_id")
+	if strings.TrimSpace(chatID) == "" {
+		http.Error(w, "chat_id is required", http.StatusBadRequest)
+		return
+	}
+
+	chat, ok := chatSessions.get(chatID)
+	if !ok || chat == nil {
+		http.Error(w, "chat not found", http.StatusNotFound)
+		return
+	}
 	var payload struct {
 		Facts map[string]any `json:"facts"`
 	}
@@ -304,10 +344,7 @@ func LoadFactsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if defaultChat == nil {
-		defaultChat = NewChat("")
-	}
-	defaultChat.LoadFacts(payload.Facts)
+	chat.LoadFacts(payload.Facts)
 	w.WriteHeader(http.StatusOK)
 }
 

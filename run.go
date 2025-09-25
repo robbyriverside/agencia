@@ -65,7 +65,7 @@ func (r *RunContext) CallAgent(ctx context.Context, name string, input string) A
 		case aliasAgent.Prompt != "":
 			result = r.execPromptAlias(ctx, agent, aliasAgent, input, name)
 		case aliasAgent.Alias != "":
-			return AgentResult{Ran: false, Error: errors.New("invalid alias of an alias agent not allowed"), AgentName: name}
+			result = r.CallAgent(ctx, aliasAgent.Alias, input)
 		default:
 			return AgentResult{Ran: false, Error: errors.New("invalid alias agent: no prompt, template, or function"), AgentName: name}
 		}

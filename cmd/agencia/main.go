@@ -54,7 +54,7 @@ func (r *RunCommand) Execute(args []string) error {
 		logs.Error(err)
 		return errors.New("run command failed")
 	}
-	if err := registry.RunPrint(ctx, r.Name, r.Input); err != nil {
+	if err := registry.RunPrint(ctx, nil, r.Name, r.Input); err != nil {
 		logs.Error(err)
 		return errors.New("run command failed")
 	}

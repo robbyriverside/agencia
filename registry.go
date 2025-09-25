@@ -89,7 +89,7 @@ func (r *Registry) RegisterAgent(agent *agents.Agent) {
 }
 
 // Run is the main entrypoint for calling an agent
-func (r *Registry) Run(ctx context.Context, name string, input string) (string, *TraceCard) {
+func (r *Registry) Run(ctx context.Context, chat *Chat, name string, input string) (string, *TraceCard) {
 	// If input is a JSON object with a "message" key, extract and use only that value
 	if strings.HasPrefix(input, "{") {
 		var tmp map[string]interface{}
@@ -99,7 +99,7 @@ func (r *Registry) Run(ctx context.Context, name string, input string) (string, 
 			}
 		}
 	}
-	run := NewRun(r, defaultChat)
+	run := NewRun(r, chat)
 	res := run.CallAgent(ctx, name, input)
 	if res.Error != nil {
 		logs.Error("[AGENT ERROR]", res.Error)
@@ -114,23 +114,19 @@ func (r *Registry) Run(ctx context.Context, name string, input string) (string, 
 	if !utf8.ValidString(out) {
 		out = strings.ToValidUTF8(out, "�")
 	}
-	if strings.TrimSpace(out) == "" {
-		out = "no output"
-	}
-
-	if defaultChat != nil {
-		agent := defaultChat.Registry.Agents[defaultChat.StartAgent]
+	if chat != nil {
+		agent := chat.Registry.Agents[chat.StartAgent]
 		if agent != nil {
 			run.ExtractAgentMemory(ctx, agent, input, out)
 		}
-		defaultChat.Cards = append(defaultChat.Cards, run.Card)
+		chat.Cards = append(chat.Cards, run.Card)
 	}
 	return out, run.Card
 }
 
 // RunPrint is the main entrypoint for calling an agent from the CLI
-func (r *Registry) RunPrint(ctx context.Context, name string, input string) error {
-	run := NewRun(r, defaultChat)
+func (r *Registry) RunPrint(ctx context.Context, chat *Chat, name string, input string) error {
+	run := NewRun(r, chat)
 	run.IsPrint = true
 	res := run.CallAgent(ctx, name, input)
 	if res.Error != nil {

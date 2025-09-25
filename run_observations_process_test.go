@@ -31,7 +31,6 @@ func runPrompt(ctx context.Context, run *RunContext, agent *agents.Agent, input 
 func TestPromptAgentAddsObservationTrace(t *testing.T) {
 	requireAPI(t)
 
-	defaultChat = NewChat("buddy")
 	spec := `
 roles:
   friend:
@@ -48,7 +47,7 @@ agents:
 		{"My mother loved cooking. She always wore the most amazing apron.", []string{"apron", "aprons"}},
 		{"I'm taking a cooking class.", []string{"apron", "aprons", "cooking"}},
 	}
-	execAgenciaTests(t, "obs", spec, tests)
+	execAgenciaTests(t, "buddy", "obs", spec, tests)
 }
 
 type testPair struct {
@@ -56,22 +55,17 @@ type testPair struct {
 	checks []string
 }
 
-func execAgenciaTests(t *testing.T, traceName, spec string, tests []testPair) {
-	reg, err := defaultChat.NewRegistry(spec)
+func execAgenciaTests(t *testing.T, startAgent, traceName, spec string, tests []testPair) {
+	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
-
-	if defaultChat == nil {
-		defaultChat = NewChat("helpline")
-	}
-	require.NoError(t, err)
+	chat := NewChat(startAgent, reg)
 
 	for i, test := range tests {
-		// First call should run greeter and change chat.Start
-		out1, trace := reg.Run(context.Background(), defaultChat.StartAgent, test.input)
+		chat.SetStartAgent(startAgent)
+		out1, trace := reg.Run(context.Background(), chat, chat.StartAgent, test.input)
 		require.NoError(t, trace.Error)
 		t.Log(trace.SaveMarkdown(fmt.Sprintf("trace_%s%d.md", traceName, i)))
 
-		//assert.Contains(t, out1, test.output)
 		t.Logf("Input: %s", test.input)
 		t.Logf("Result: %s", out1)
 		t.Logf("Compare: %s\n", test.checks)
@@ -81,7 +75,7 @@ func execAgenciaTests(t *testing.T, traceName, spec string, tests []testPair) {
 // func TestObservationPromptPersonalizesResponse(t *testing.T) {
 // 	requireAPI(t)
 
-// 	defaultChat = NewChat("buddy")
+// 	chat := NewChat("buddy", reg)
 // 	spec := `
 // roles:
 //   friend:
@@ -93,10 +87,11 @@ func execAgenciaTests(t *testing.T, traceName, spec string, tests []testPair) {
 //   buddy:
 //     role: friend
 //     prompt: "Respond to the user: {{ .Input }}"`
-// 	reg, err := defaultChat.NewRegistry(spec)
+// 	reg, err := NewRegistry(spec)
 // 	require.NoError(t, err)
+// 	chat := NewChat("buddy", reg)
 // 	agent := reg.Agents["buddy"]
-// 	run := NewRun(reg, defaultChat)
+// 	run := NewRun(reg, chat)
 // 	ctx := context.Background()
 
 // 	// Seed observations

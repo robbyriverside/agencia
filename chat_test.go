@@ -2,23 +2,17 @@ package agencia
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/joho/godotenv"
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestProcessAgentMemory(t *testing.T) {
-	// ctx := context.Background()
-	_ = godotenv.Load()
+	requireAPI(t)
 
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
 	// Define a simple agent with one fact
 	agent := &agents.Agent{
 		Name: "printer",
@@ -39,8 +33,7 @@ func TestProcessAgentMemory(t *testing.T) {
 	}
 
 	// Create a chat and bind it to the registry
-	chat := NewChat("printer")
-	// reg.Chat = chat
+	chat := NewChat("printer", reg)
 	run := NewRun(reg, chat)
 	// Simulate input/output for fact extraction
 	input := "Please print on a small card."
@@ -61,8 +54,6 @@ func TestProcessAgentMemory(t *testing.T) {
 // TestTemplateStartSwitch verifies that using {{ .Start "agent" }} in a template
 // changes the chat's start agent for the next user message.
 func TestTemplateStartSwitch(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   greeter:
@@ -73,29 +64,26 @@ agents:
     template: "Helper heard: {{ .Input }}"
 `
 
-	// Chat starts with 'greeter'
-	if defaultChat == nil {
-		defaultChat = NewChat("greeter")
-	}
-	reg, err := defaultChat.NewRegistry(spec)
+	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
+	chat := NewChat("greeter", reg)
 
 	// First call should run greeter and change chat.Start
-	out1, trace := reg.Run(context.Background(), defaultChat.StartAgent, "first")
+	out1, trace := reg.Run(context.Background(), chat, chat.StartAgent, "first")
 	assert.Equal(t, "greeter", trace.AgentName, "chat start agent should helper")
 	trace.SaveMarkdown("trace1.md", true)
 	assert.Contains(t, out1, "Hi there!")
-	assert.Equal(t, "helper", defaultChat.StartAgent, "chat start agent should switch to helper")
+	assert.Equal(t, "helper", chat.StartAgent, "chat start agent should switch to helper")
 
 	// Second call should now go to helper automatically
-	out2, trace := reg.Run(context.Background(), defaultChat.StartAgent, "second")
+	out2, trace := reg.Run(context.Background(), chat, chat.StartAgent, "second")
 	trace.SaveMarkdown("trace2.md", true)
 	assert.Equal(t, "helper", trace.AgentName, "chat start agent should helper")
 	assert.Equal(t, "Helper heard: second", strings.TrimSpace(out2))
 }
 
 func TestChatAddObservation(t *testing.T) {
-	chat := NewChat("test")
+	chat := NewChat("test", &Registry{})
 	chat.AddObservation("writer", "preference", "prefers novels to short stories")
 
 	obs := chat.ObservationsByRole("writer")

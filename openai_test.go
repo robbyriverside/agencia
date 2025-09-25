@@ -3,24 +3,15 @@ package agencia
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/joho/godotenv"
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCallOpenAI_FunctionCalling(t *testing.T) {
-	// Try to load .env file first
-	_ = godotenv.Load()
-
-	// Check the API key
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
+	requireAPI(t)
 	reg := &Registry{}
 	ctx := context.Background()
 
@@ -50,12 +41,6 @@ func TestCallOpenAI_FunctionCalling(t *testing.T) {
 }
 
 func TestCallOpenAI_ToolNotFound(t *testing.T) {
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
 	reg := &Registry{}
 	ctx := context.Background()
 
@@ -70,18 +55,16 @@ func TestCallOpenAI_ToolNotFound(t *testing.T) {
 	assert.NoError(t, err, "should find tryme agent")
 
 	output, err := NewRun(reg, nil).CallAI(ctx, agent, "Say hello to Alice.")
+	if err != nil && strings.Contains(err.Error(), "OpenAI API error") {
+		t.Skipf("skipping due to OpenAI connectivity error: %v", err)
+	}
 	assert.Error(t, err, "should error due to missing tool")
 	assert.Contains(t, err.Error(), "could not find agent", "should mention missing agent")
 	assert.Empty(t, output, "output should be empty on tool not found")
 }
 
 func TestCallOpenAI_MultipleToolCalls(t *testing.T) {
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
+	requireAPI(t)
 	reg := &Registry{}
 	ctx := context.Background()
 
@@ -120,12 +103,7 @@ func TestCallOpenAI_MultipleToolCalls(t *testing.T) {
 }
 
 func TestCallOpenAI_EmptyToolOutput(t *testing.T) {
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
+	requireAPI(t)
 	reg := &Registry{}
 	ctx := context.Background()
 
@@ -157,12 +135,7 @@ func TestCallOpenAI_EmptyToolOutput(t *testing.T) {
 }
 
 func TestCallOpenAI_RecursiveToolCalling(t *testing.T) {
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
+	requireAPI(t)
 	prompt := fmt.Sprintf(`
       1. Call the tool **echo1** with the argument:
          %sjson
@@ -222,12 +195,6 @@ func TestCallOpenAI_RecursiveToolCalling(t *testing.T) {
 }
 
 func TestCallOpenAI_InvalidToolSchema(t *testing.T) {
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
 	reg := &Registry{}
 	ctx := context.Background()
 
@@ -252,18 +219,14 @@ func TestCallOpenAI_InvalidToolSchema(t *testing.T) {
 
 	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "test invalid schema")
 	fmt.Printf("***Error: %s\n", res.Error)
-
+	if res.Error != nil && strings.Contains(res.Error.Error(), "OpenAI API error") {
+		t.Skipf("skipping due to OpenAI connectivity error: %v", res.Error)
+	}
 	assert.Error(t, res.Error, "should error due to invalid schema")
 	assert.True(t, strings.Contains(strings.ToLower(res.Error.Error()), "invalid"), "error should mention invalid schema or tool setup")
 }
 
 func TestCallOpenAI_ContinuationMissingTool(t *testing.T) {
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
 	reg := &Registry{}
 	ctx := context.Background()
 
@@ -276,18 +239,14 @@ func TestCallOpenAI_ContinuationMissingTool(t *testing.T) {
 
 	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "Alice")
 	fmt.Printf("***Error: %s\n", res.Error)
-
+	if res.Error != nil && strings.Contains(res.Error.Error(), "OpenAI API error") {
+		t.Skipf("skipping due to OpenAI connectivity error: %v", res.Error)
+	}
 	assert.Error(t, res.Error, "should error due to missing agent during continuation")
 	assert.Contains(t, res.Error.Error(), "could not find", "error should mention missing agent or tool")
 }
 
 func TestCallOpenAI_AgentTemplateFails(t *testing.T) {
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
 	reg := &Registry{}
 	ctx := context.Background()
 
@@ -307,18 +266,14 @@ func TestCallOpenAI_AgentTemplateFails(t *testing.T) {
 
 	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "Alice")
 	fmt.Printf("***Error: %s\n", res.Error)
-
+	if res.Error != nil && strings.Contains(res.Error.Error(), "OpenAI API error") {
+		t.Skipf("skipping due to OpenAI connectivity error: %v", res.Error)
+	}
 	assert.Error(t, res.Error, "should error due to template execution failure")
 	assert.Contains(t, res.Error.Error(), "template", "error should mention template execution")
 }
 
 func TestCallOpenAI_MultipleBadListeners(t *testing.T) {
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
-
 	reg := &Registry{}
 	ctx := context.Background()
 
@@ -359,7 +314,9 @@ func TestCallOpenAI_MultipleBadListeners(t *testing.T) {
 
 	res := NewRun(reg, nil).CallAgent(ctx, "tryme", "testing bad listeners")
 	fmt.Printf("***Error: %s\n", res.Error)
-
+	if res.Error != nil && strings.Contains(res.Error.Error(), "OpenAI API error") {
+		t.Skipf("skipping due to OpenAI connectivity error: %v", res.Error)
+	}
 	assert.Error(t, res.Error, "should error due to multiple invalid listeners")
 	assert.Contains(t, res.Error.Error(), "badtool1", "should mention badtool1")
 	assert.Contains(t, res.Error.Error(), "badtool2", "should mention badtool2")

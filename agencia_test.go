@@ -3,11 +3,9 @@ package agencia
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/joho/godotenv"
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +27,7 @@ agents:
 	registry, err := NewRegistry(spec)
 	assert.NoError(t, err, "NewRegistry() error = %v", err)
 
-	got, card := registry.Run(ctx, "greet", "Bob")
+	got, card := registry.Run(ctx, nil, "greet", "Bob")
 	want := "Hello, Bob!"
 	if got != want {
 		t.Fatalf("greet output = %q, want %q", got, want)
@@ -41,8 +39,6 @@ agents:
 // TestInvalidAgent_NoType ensures NewRegistry returns an error when an agent
 // definition lacks template, prompt, function, or alias.
 func TestInvalidAgent_NoType(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   broken:
@@ -54,8 +50,6 @@ agents:
 
 // TestCircularAlias detects a self‑referencing alias loop and returns an error.
 func TestCircularAlias(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   whoopsy:
@@ -92,8 +86,6 @@ agents:
 // TestTemplate_GetMissing ensures that calling .Get on a non‑existent agent
 // surfaces an error at run time.
 func TestTemplate_GetMissing(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   caller:
@@ -103,7 +95,7 @@ agents:
 	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
 
-	out, card := reg.Run(context.Background(), "caller", "")
+	out, card := reg.Run(context.Background(), nil, "caller", "")
 	require.NotNil(t, card)
 	t.Logf("Output: %s", out)
 	assert.Contains(t, out, "could not find agent: does.not.exist", "trace card should note missing agent")
@@ -111,8 +103,6 @@ agents:
 
 // TestSprigFunc_DefaultIfEmpty validates sprig's default helper.
 func TestSprigFunc_DefaultIfEmpty(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   anon:
@@ -122,8 +112,8 @@ agents:
 	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
 
-	outEmpty, _ := reg.Run(context.Background(), "anon", "")
-	outName, _ := reg.Run(context.Background(), "anon", "Lilith")
+	outEmpty, _ := reg.Run(context.Background(), nil, "anon", "")
+	outName, _ := reg.Run(context.Background(), nil, "anon", "Lilith")
 
 	assert.Equal(t, "anonymous", outEmpty)
 	assert.Equal(t, "Lilith", outName)
@@ -148,16 +138,8 @@ agents:
 	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
 
-	got, _ := reg.Run(context.Background(), "echo", "hello there")
+	got, _ := reg.Run(context.Background(), nil, "echo", "hello there")
 	assert.Equal(t, `ECHO: hello there`, strings.TrimSpace(got))
-}
-
-// requireAPI skips a test if OPENAI_API_KEY is not set.
-func requireAPI(t *testing.T) {
-	_ = godotenv.Load()
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Skip("OPENAI_API_KEY not configured; skipping test that calls OpenAI")
-	}
 }
 
 // TestPromptAgent_Deterministic verifies that a prompt‑style agent can call the
@@ -174,13 +156,12 @@ agents:
 	reg, err := NewRegistry(spec)
 	assert.NoError(t, err)
 
-	got, _ := reg.Run(context.Background(), "oksay", "ready")
+	got, _ := reg.Run(context.Background(), nil, "oksay", "ready")
 	assert.Equal(t, "OK", strings.TrimSpace(got))
 }
 
 // TestAliasAgent_Redirect ensures that an alias points to its target agent.
 func TestAliasAgent_Redirect(t *testing.T) {
-	requireAPI(t)
 	const spec = `
 agents:
   greet:
@@ -192,7 +173,7 @@ agents:
 	reg, err := NewRegistry(spec)
 	assert.NoError(t, err)
 
-	got, _ := reg.Run(context.Background(), "hello", "Carl")
+	got, _ := reg.Run(context.Background(), nil, "hello", "Carl")
 	assert.Equal(t, "Hello, Carl!", got)
 }
 
@@ -211,7 +192,7 @@ agents:
 	reg, err := NewRegistry(spec)
 	assert.NoError(t, err)
 
-	got, _ := reg.Run(context.Background(), "intro", "Dana")
+	got, _ := reg.Run(context.Background(), nil, "intro", "Dana")
 	assert.Equal(t, "Hello, Dana! Welcome to Agencia.", got)
 }
 
@@ -226,14 +207,12 @@ agents:
 	reg, err := NewRegistry(spec)
 	assert.NoError(t, err)
 
-	got, _ := reg.Run(context.Background(), "shout", "whisper")
+	got, _ := reg.Run(context.Background(), nil, "shout", "whisper")
 	assert.Equal(t, "WHISPER", got)
 }
 
 // TestBlankTemplate_Skips ensures that an empty template returns an empty string.
 func TestBlankTemplate_Skips(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   skip:
@@ -243,7 +222,7 @@ agents:
 	reg, err := NewRegistry(spec)
 	require.Error(t, err)
 	if reg != nil {
-		out, card := reg.Run(context.Background(), "skip", "")
+		out, card := reg.Run(context.Background(), nil, "skip", "")
 		t.Logf("Card: %v", card)
 		assert.Equal(t, "", strings.TrimSpace(out))
 	}
@@ -251,8 +230,6 @@ agents:
 
 // TestSprigFunc_Truncate validates that sprig's truncate helper is wired in.
 func TestSprigFunc_Truncate(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   abbrev:
@@ -263,15 +240,13 @@ agents:
 	assert.NoError(t, err)
 
 	long := "supercalifragilistic"
-	out, _ := reg.Run(context.Background(), "abbrev", long)
+	out, _ := reg.Run(context.Background(), nil, "abbrev", long)
 	assert.Equal(t, "superc", out)
 }
 
 // TestTemplateAgent_EmptyInput checks that a valid template agent returns an
 // empty string when supplied with an empty input.
 func TestTemplateAgent_EmptyInput(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   echo:
@@ -281,7 +256,7 @@ agents:
 	reg, err := NewRegistry(spec)
 	assert.NoError(t, err, "NewRegistry() should succeed for a simple template agent")
 
-	out, _ := reg.Run(context.Background(), "echo", "")
+	out, _ := reg.Run(context.Background(), nil, "echo", "")
 	assert.Equal(t, "", strings.TrimSpace(out))
 }
 
@@ -304,15 +279,13 @@ agents:
 
 	// Send a free‑form sentence; handleAgentInputs should ask AI to pull "Veronica".
 	userMsg := "Nice to meet you, my name is Dr. Veronica Zuul and I love Go."
-	out, _ := reg.Run(context.Background(), "greeter", userMsg)
+	out, _ := reg.Run(context.Background(), nil, "greeter", userMsg)
 	t.Logf("Output: %q", out)
 	assert.Contains(t, out, "Dr. Veronica Zuul", "expected extracted name in greeting")
 }
 
 // TestAliasChain ensures that multiple alias hops still reach the base agent.
 func TestAliasChain(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   greet:
@@ -326,14 +299,12 @@ agents:
 	reg, err := NewRegistry(spec)
 	assert.NoError(t, err)
 
-	out, _ := reg.Run(context.Background(), "hi", "Sam")
+	out, _ := reg.Run(context.Background(), nil, "hi", "Sam")
 	assert.Equal(t, "Hello, Sam!", out)
 }
 
 // TestSprigFunc_Title verifies that sprig's title helper is available.
 func TestSprigFunc_Title(t *testing.T) {
-	requireAPI(t)
-
 	const spec = `
 agents:
   proper:
@@ -343,7 +314,7 @@ agents:
 	reg, err := NewRegistry(spec)
 	assert.NoError(t, err)
 
-	out, _ := reg.Run(context.Background(), "proper", "once upon a time")
+	out, _ := reg.Run(context.Background(), nil, "proper", "once upon a time")
 	assert.Equal(t, "Once Upon A Time", out)
 }
 
@@ -402,7 +373,7 @@ agents:
 		}),
 	})
 
-	out, card := reg.Run(context.Background(), "start", "hello")
+	out, card := reg.Run(context.Background(), nil, "start", "hello")
 	assert.Equal(t, "DONE", strings.TrimSpace(out))
 	require.NotNil(t, card)
 	card.SaveMarkdown("complex_trace.md")
@@ -433,7 +404,7 @@ agents:
 	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
 
-	out, card := reg.Run(context.Background(), "greet", "My name is Zaphod and my number is 42")
+	out, card := reg.Run(context.Background(), nil, "greet", "My name is Zaphod and my number is 42")
 	// assert.Equal(t, "DONE", strings.TrimSpace(out))
 	require.NotNil(t, card)
 	assert.Contains(t, out, "Zaphod", "expected extracted name in greeting")

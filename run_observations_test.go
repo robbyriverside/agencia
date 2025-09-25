@@ -23,7 +23,7 @@ func TestProcessObservations(t *testing.T) {
 	reg := &Registry{Roles: map[string]*agents.AgentRole{
 		"writer": {ID: "writer", Name: "writer", Observations: map[string]string{"writing_pref": "writing preferences"}},
 	}}
-	chat := NewChat("a")
+	chat := NewChat("a", reg)
 	chat.AddObservation("writer", "writing_pref", "likes poetry")
 	run := NewRun(reg, chat)
 

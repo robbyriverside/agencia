@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/joho/godotenv"
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/stretchr/testify/assert"
 )
@@ -15,12 +14,8 @@ import (
 const loopCount = 10
 
 func TestFunctionAgentWithInputs(t *testing.T) {
+	requireAPI(t)
 	ctx := context.Background()
-	_ = godotenv.Load()
-
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Fatal("OPENAI_API_KEY must be set (either in environment or .env file)")
-	}
 
 	// Agent with InputPrompt including required and optional fields
 	agent := &agents.Agent{
@@ -56,7 +51,7 @@ func TestFunctionAgentWithInputs(t *testing.T) {
 	t.Run("missing required value", func(t *testing.T) {
 		for i := 0; i < loopCount; i++ {
 			t.Run(fmt.Sprintf("run %d", i), func(t *testing.T) {
-				res, trace := reg.Run(ctx, "test_func", "b: optional\n")
+				res, trace := reg.Run(ctx, nil, "test_func", "b: optional\n")
 				if trace.Error != nil {
 					trace.WriteMarkdown(os.Stdout)
 				}

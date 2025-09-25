@@ -9,8 +9,15 @@ import (
 )
 
 func TestLoadFactsHandler(t *testing.T) {
-	defaultChat = NewChat("test")
-	defaultChat.Facts["old"] = "value"
+	chatSessions = newChatSessionStore()
+	chatID := "test-chat"
+	chat := NewChat("test", &Registry{})
+	chat.ChatID = chatID
+	chat.Facts["old"] = "value"
+
+	chatSessions.mu.Lock()
+	chatSessions.sessions[chatID] = chat
+	chatSessions.mu.Unlock()
 
 	payload := map[string]any{
 		"facts": map[string]any{
@@ -22,7 +29,7 @@ func TestLoadFactsHandler(t *testing.T) {
 		t.Fatalf("failed to marshal payload: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/loadfacts", bytes.NewReader(data))
+	req := httptest.NewRequest(http.MethodPost, "/api/loadfacts?chat_id="+chatID, bytes.NewReader(data))
 	w := httptest.NewRecorder()
 	LoadFactsHandler(w, req)
 
@@ -30,10 +37,10 @@ func TestLoadFactsHandler(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("expected status OK, got %v", res.Status)
 	}
-	if _, ok := defaultChat.Facts["old"]; ok {
+	if _, ok := chat.Facts["old"]; ok {
 		t.Fatalf("expected old facts to be replaced")
 	}
-	if v, ok := defaultChat.Facts["new"]; !ok || v != "fact" {
-		t.Fatalf("expected new fact to be loaded, got %v", defaultChat.Facts)
+	if v, ok := chat.Facts["new"]; !ok || v != "fact" {
+		t.Fatalf("expected new fact to be loaded, got %v", chat.Facts)
 	}
 }

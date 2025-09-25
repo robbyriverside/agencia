@@ -38,19 +38,16 @@ func TestHelplineProto(t *testing.T) {
 	tests := root.Scripts[2].Dialog
 	// Load the spec
 
-	// Chat starts with 'greeter'
-	if defaultChat == nil {
-		defaultChat = NewChat("mainmenu")
-	}
-	reg, err := defaultChat.NewRegistry(spec)
+	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
+	chat := NewChat("mainmenu", reg)
 
 	for i, test := range tests {
-		// First call should run greeter and change chat.Start
-		out1, trace := reg.Run(context.Background(), defaultChat.StartAgent, test.Input)
+		chat.SetStartAgent("mainmenu")
+		out1, trace := reg.Run(context.Background(), chat, chat.StartAgent, test.Input)
 		// if trace.Error != nil  {
 		trace.SaveMarkdown(fmt.Sprintf("trace%d.md", i))
-		facts := defaultChat.Facts["mainmenu.information"]
+		facts := chat.Facts["mainmenu.information"]
 		if facts != nil {
 			t.Logf("*** Facts: %s", facts)
 		}
@@ -132,16 +129,13 @@ agents:
 	}
 	// Load the spec
 
-	// Chat starts with 'greeter'
-	if defaultChat == nil {
-		defaultChat = NewChat("helpline")
-	}
-	reg, err := defaultChat.NewRegistry(spec)
+	reg, err := NewRegistry(spec)
 	require.NoError(t, err)
+	chat := NewChat("helpline", reg)
 
 	for i, test := range tests {
-		// First call should run greeter and change chat.Start
-		out1, trace := reg.Run(context.Background(), defaultChat.StartAgent, test.input)
+		chat.SetStartAgent("helpline")
+		out1, trace := reg.Run(context.Background(), chat, chat.StartAgent, test.input)
 		if trace.Error != nil {
 			trace.SaveMarkdown(fmt.Sprintf("trace%d.md", i))
 		}
