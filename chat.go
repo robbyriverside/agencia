@@ -33,20 +33,16 @@ func (s *chatSessionStore) startSession(conn *websocket.Conn, agent string, regi
 	defer s.mu.Unlock()
 
 	if chat, ok := s.connIndex[conn]; ok && chat != nil {
-		if chat.ChatID != "" {
-			s.sessions[chat.ChatID] = chat
-		}
+		s.sessions[chat.ChatID] = chat
 		chat.SetStartAgent(agent)
 		chat.Registry = registry
 		chat.Conn = conn
 		return chat
 	}
 
-	chatID := uuid.NewString()
 	chat := NewChat(agent, registry)
-	chat.ChatID = chatID
 	chat.Conn = conn
-	s.sessions[chatID] = chat
+	s.sessions[chat.ChatID] = chat
 	s.connIndex[conn] = chat
 	return chat
 }
@@ -62,7 +58,7 @@ func (s *chatSessionStore) endSession(conn *websocket.Conn) {
 	}
 }
 
-func (s *chatSessionStore) get(chatID string) (*Chat, bool) {
+func (s *chatSessionStore) chat(chatID string) (*Chat, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	chat, ok := s.sessions[chatID]
@@ -96,6 +92,7 @@ func (c *Chat) IsValidStartAgent(name string) bool {
 func NewChat(agent string, registry *Registry) *Chat {
 	return &Chat{
 		Registry:     registry,
+		ChatID:       uuid.NewString(),
 		StartAgent:   agent,
 		Facts:        make(map[string]any),
 		Observations: make(map[string]map[string][]string),
@@ -303,7 +300,7 @@ func FactsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chat, ok := chatSessions.get(chatID)
+	chat, ok := chatSessions.chat(chatID)
 	if !ok || chat == nil {
 		http.Error(w, "chat not found", http.StatusNotFound)
 		return
@@ -332,7 +329,7 @@ func LoadFactsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chat, ok := chatSessions.get(chatID)
+	chat, ok := chatSessions.chat(chatID)
 	if !ok || chat == nil {
 		http.Error(w, "chat not found", http.StatusNotFound)
 		return
