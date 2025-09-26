@@ -2,9 +2,12 @@ package agencia
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gorilla/websocket"
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,4 +92,51 @@ func TestChatAddObservation(t *testing.T) {
 	obs := chat.ObservationsByRole("writer")
 	require.NotNil(t, obs)
 	assert.Equal(t, []string{"prefers novels to short stories"}, obs["preference"])
+}
+
+func TestChatSessionStoreResume(t *testing.T) {
+	store := newChatSessionStore()
+	conn1 := &websocket.Conn{}
+	chat := store.startSession(conn1, "agent", &Registry{})
+	require.NotNil(t, chat)
+	assert.Equal(t, conn1, chat.Conn)
+
+	store.endSession(conn1)
+	assert.Nil(t, chat.Conn)
+
+	conn2 := &websocket.Conn{}
+	resumed, err := store.resumeSession(chat.ChatID, conn2)
+	require.NoError(t, err)
+	require.Equal(t, chat, resumed)
+	assert.Equal(t, conn2, resumed.Conn)
+
+	_, err = store.closeChat(chat.ChatID)
+	require.NoError(t, err)
+	_, err = store.resumeSession(chat.ChatID, &websocket.Conn{})
+	require.Error(t, err)
+}
+
+func TestCloseChatHandler(t *testing.T) {
+	oldStore := chatSessions
+	chatSessions = newChatSessionStore()
+	defer func() { chatSessions = oldStore }()
+
+	chat := NewChat("test", &Registry{})
+	chatSessions.sessions[chat.ChatID] = chat
+
+	req := httptest.NewRequest(http.MethodPost, "/api/closechat?chat_id="+chat.ChatID, nil)
+	w := httptest.NewRecorder()
+	CloseChatHandler(w, req)
+
+	res := w.Result()
+	require.Equal(t, http.StatusNoContent, res.StatusCode)
+	if _, ok := chatSessions.get(chat.ChatID); ok {
+		t.Fatalf("expected chat to be removed from sessions")
+	}
+	require.True(t, chat.Closed)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/api/closechat?chat_id="+chat.ChatID, nil)
+	w2 := httptest.NewRecorder()
+	CloseChatHandler(w2, req2)
+	require.Equal(t, http.StatusNotFound, w2.Result().StatusCode)
 }

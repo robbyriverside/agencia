@@ -37,6 +37,7 @@ func (s *chatSessionStore) startSession(conn *websocket.Conn, agent string, regi
 		chat.SetStartAgent(agent)
 		chat.Registry = registry
 		chat.Conn = conn
+		chat.Closed = false
 		return chat
 	}
 
@@ -47,18 +48,63 @@ func (s *chatSessionStore) startSession(conn *websocket.Conn, agent string, regi
 	return chat
 }
 
+func (s *chatSessionStore) resumeSession(chatID string, conn *websocket.Conn) (*Chat, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	chat, ok := s.sessions[chatID]
+	if !ok || chat == nil {
+		return nil, fmt.Errorf("chat not found")
+	}
+	if chat.Closed {
+		return nil, fmt.Errorf("chat is closed")
+	}
+	if chat.Conn != nil {
+		delete(s.connIndex, chat.Conn)
+	}
+	chat.Conn = conn
+	s.connIndex[conn] = chat
+	return chat, nil
+}
+
 func (s *chatSessionStore) endSession(conn *websocket.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if chat, ok := s.connIndex[conn]; ok {
 		delete(s.connIndex, conn)
-		if chat != nil && chat.ChatID != "" {
-			delete(s.sessions, chat.ChatID)
+		if chat != nil {
+			if chat.Conn == conn {
+				chat.Conn = nil
+			}
+			if chat.Closed && chat.ChatID != "" {
+				delete(s.sessions, chat.ChatID)
+			}
 		}
 	}
 }
 
-func (s *chatSessionStore) chat(chatID string) (*Chat, bool) {
+func (s *chatSessionStore) closeChat(chatID string) (*Chat, error) {
+	s.mu.Lock()
+	chat, ok := s.sessions[chatID]
+	if !ok || chat == nil {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("chat not found")
+	}
+	chat.Closed = true
+	conn := chat.Conn
+	if conn != nil {
+		delete(s.connIndex, conn)
+	}
+	delete(s.sessions, chatID)
+	chat.Conn = nil
+	s.mu.Unlock()
+	if conn != nil && conn.UnderlyingConn() != nil {
+		_ = conn.Close()
+	}
+	return chat, nil
+}
+
+func (s *chatSessionStore) get(chatID string) (*Chat, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	chat, ok := s.sessions[chatID]
@@ -75,6 +121,7 @@ type Chat struct {
 	Observations map[string]map[string][]string
 	Cards        []*TraceCard
 	Conn         *websocket.Conn
+	Closed       bool
 }
 
 func (c *Chat) SetStartAgent(name string) {
@@ -159,8 +206,9 @@ func (c *Chat) SendMessageFromAgent(agentName, context, msg string) error {
 
 func ChatSessionHandler(w http.ResponseWriter, r *http.Request) {
 	type ChatInitRequest struct {
-		Agent string `json:"agent"`
-		Spec  string `json:"spec"` // optionally store or use this
+		Agent  string `json:"agent"`
+		Spec   string `json:"spec"` // optionally store or use this
+		ChatID string `json:"chat_id"`
 	}
 
 	upgrader := websocket.Upgrader{
@@ -187,15 +235,47 @@ func ChatSessionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registry, err := NewRegistry(initReq.Spec)
-	if err != nil {
-		log.Println("Failed to create registry:", err)
-		http.Error(w, "failed to create registry", http.StatusInternalServerError)
-		return
+	var (
+		chat     *Chat
+		registry *Registry
+	)
+
+	if chatID := strings.TrimSpace(initReq.ChatID); chatID != "" {
+		var resumeErr error
+		chat, resumeErr = chatSessions.resumeSession(chatID, conn)
+		if resumeErr != nil {
+			log.Printf("Failed to resume chat %s: %v", chatID, resumeErr)
+			_ = conn.WriteJSON(map[string]any{
+				"type":  "error",
+				"error": "chat not found or closed",
+			})
+			return
+		}
+		if initReq.Agent != "" {
+			chat.SetStartAgent(initReq.Agent)
+		}
+		registry = chat.Registry
+		if registry == nil {
+			log.Printf("Chat %s has no registry", chatID)
+			_ = conn.WriteJSON(map[string]any{
+				"type":  "error",
+				"error": "chat has no registry",
+			})
+			return
+		}
+	} else {
+		var regErr error
+		registry, regErr = NewRegistry(initReq.Spec)
+		if regErr != nil {
+			log.Println("Failed to create registry:", regErr)
+			http.Error(w, "failed to create registry", http.StatusInternalServerError)
+			return
+		}
+		chat = chatSessions.startSession(conn, initReq.Agent, registry)
 	}
 
-	chat := chatSessions.startSession(conn, initReq.Agent, registry)
 	defer chatSessions.endSession(conn)
+	registry = chat.Registry
 
 	if err := conn.WriteJSON(map[string]any{
 		"type":    "chat_init",
@@ -300,7 +380,7 @@ func FactsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chat, ok := chatSessions.chat(chatID)
+	chat, ok := chatSessions.get(chatID)
 	if !ok || chat == nil {
 		http.Error(w, "chat not found", http.StatusNotFound)
 		return
@@ -316,6 +396,27 @@ func FactsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// CloseChatHandler marks the chat as closed and removes it from the session store.
+func CloseChatHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	chatID := r.URL.Query().Get("chat_id")
+	if strings.TrimSpace(chatID) == "" {
+		http.Error(w, "chat_id is required", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := chatSessions.closeChat(chatID); err != nil {
+		http.Error(w, "chat not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // LoadFactsHandler replaces the chat facts with the provided map.
 func LoadFactsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -329,7 +430,7 @@ func LoadFactsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chat, ok := chatSessions.chat(chatID)
+	chat, ok := chatSessions.get(chatID)
 	if !ok || chat == nil {
 		http.Error(w, "chat not found", http.StatusNotFound)
 		return

@@ -27,3 +27,6 @@ go.work.sum
 .DS_Store
 bin/
 TODO.md
+.gocache/
+.idea/
+.vscode/
