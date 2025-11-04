@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
+	"github.com/robbyriverside/agencia/config"
+	"github.com/robbyriverside/agencia/logs"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -98,34 +101,94 @@ var openaiClient *openai.Client
 // var openaiInitialized bool
 
 func GetOpenAIClient() (*openai.Client, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	org := os.Getenv("OPENAI_ORG")
+	cfg, err := config.Get()
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+	if !cfg.OpenAI.Enabled {
+		return nil, errors.New("OpenAI usage disabled via configuration")
+	}
+
+	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if apiKey == "" {
 		return nil, errors.New("OPENAI_API_KEY must be set")
 	}
-	config := openai.DefaultConfig(apiKey)
-	config.OrgID = org
-	openaiClient = openai.NewClientWithConfig(config)
+
+	openAIConfig := openai.DefaultConfig(apiKey)
+	if base := strings.TrimSpace(cfg.OpenAI.APIBase); base != "" {
+		openAIConfig.BaseURL = strings.TrimRight(base, "/")
+	}
+	if org := strings.TrimSpace(cfg.OpenAI.Organization); org != "" {
+		openAIConfig.OrgID = org
+	} else {
+		openAIConfig.OrgID = strings.TrimSpace(os.Getenv("OPENAI_ORG"))
+	}
+	if timeout := cfg.OpenAI.RequestTimeout.Duration(); timeout > 0 {
+		openAIConfig.HTTPClient = &http.Client{Timeout: timeout}
+	}
+	openaiClient = openai.NewClientWithConfig(openAIConfig)
 	return openaiClient, nil
 }
 
 // CallOpenAI calls the OpenAI API with the given prompt and returns the response.
 // Used by library agents to call OpenAI.
 func CallOpenAI(ctx context.Context, prompt string) (string, error) {
+	cfg, err := config.Get()
+	if err != nil {
+		return "", fmt.Errorf("load config: %w", err)
+	}
+	if !cfg.OpenAI.Enabled {
+		return "", errors.New("OpenAI usage disabled via configuration")
+	}
+
+	requestCtx := ctx
+	var cancel context.CancelFunc
+	if timeout := cfg.OpenAI.RequestTimeout.Duration(); timeout > 0 {
+		requestCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
+	if cancel != nil {
+		defer cancel()
+	}
+
+	release, err := AcquireOpenAISlot(requestCtx, cfg)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+
 	client, err := GetOpenAIClient()
 	if err != nil {
-		return "[MOCK ERROR: attempted real OpenAI call in test/mock mode]", err
+		return "", err
 	}
-	req := openai.ChatCompletionRequest{
-		Model:       openai.GPT4o,
-		Temperature: 0.2,
-		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleUser, Content: prompt},
-		},
+
+	messages := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleUser, Content: prompt},
 	}
-	resp, err := client.CreateChatCompletion(ctx, req)
+	req := BuildChatCompletionRequest(cfg.OpenAI, messages, nil)
+
+	if cfg.OpenAI.LogPrompts {
+		logs.Infof("[openai] prompt: %s", prompt)
+	}
+
+	resp, err := CallChatCompletionWithRetry(requestCtx, client, req, cfg.OpenAI)
 	if err != nil {
 		return "", fmt.Errorf("OpenAI API error: %w", err)
 	}
-	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
+
+	if len(resp.Choices) == 0 {
+		return "", errors.New("OpenAI API returned no choices")
+	}
+
+	output := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if cfg.OpenAI.LogPrompts {
+		logs.Infof("[openai] response: %s", truncateForLog(output, 800))
+	}
+	return output, nil
+}
+
+func truncateForLog(s string, limit int) string {
+	if limit <= 0 || len(s) <= limit {
+		return s
+	}
+	return fmt.Sprintf("%s...(%d chars truncated)", s[:limit], len(s)-limit)
 }

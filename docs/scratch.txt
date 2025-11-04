@@ -1,0 +1,6 @@
+in parley.go implement the text templates used for Agencia agents.  They will use the parley
+language inside of the templates.  Handle is a way to introduce domain specific objects.  For
+example, in a healthcare app it might be patient data.  It's always just a document that can be
+mined for specific values.  
+
+

@@ -1,0 +1,6 @@
+scripts:
+  - dialog:
+      - input:  "Hello, nurse did not show up today."
+        output: "I can reschedule your appointment. Who is your nurse?"
+      - input:  "My nurse is Lucinda Phillips."
+        output: "I can reschedule your appointment with Lucinda."

@@ -1,0 +1,14 @@
+agents:
+  echo_input:
+    description: Demonstrates the default INPUT form.
+    template: |
+      User message: {{ INPUT }}
+
+  echo_named_input:
+    description: Demonstrates INPUT with a named field.
+    inputs:
+      topic:
+        description: Topic supplied by the caller.
+    template: |
+      Primary topic: {{ INPUT topic }}
+      Full message: {{ INPUT }}

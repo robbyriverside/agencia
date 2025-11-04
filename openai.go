@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/robbyriverside/agencia/agents"
+	"github.com/robbyriverside/agencia/config"
+	"github.com/robbyriverside/agencia/logs"
 	"github.com/robbyriverside/agencia/utils"
 	"github.com/sashabaranov/go-openai"
 	"gopkg.in/yaml.v3"
@@ -19,6 +21,7 @@ type TemplateContext struct {
 	inputMap  map[string]any
 	Run       *RunContext
 	ctx       context.Context
+	bindings  map[string]any
 }
 
 func NewTemplateContext(ctx context.Context, agent *agents.Agent, input string, run *RunContext, inputMap map[string]any) *TemplateContext {
@@ -28,6 +31,7 @@ func NewTemplateContext(ctx context.Context, agent *agents.Agent, input string, 
 		Run:       run,
 		inputMap:  inputMap,
 		ctx:       ctx,
+		bindings:  make(map[string]any),
 	}
 }
 
@@ -106,6 +110,160 @@ func (t *TemplateContext) Input(optionalInput ...string) any {
 	}
 }
 
+func (t *TemplateContext) Call(agent string) string {
+	return t.Get(agent)
+}
+
+func (t *TemplateContext) CallWith(agent string, value any) string {
+	return t.Get(agent, t.toString(value))
+}
+
+func (t *TemplateContext) CallOnList(agent string, values any) string {
+	items := t.toStringSlice(values)
+	if len(items) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, item := range items {
+		out := t.Get(agent, item)
+		if out == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(out)
+	}
+	return b.String()
+}
+
+func (t *TemplateContext) List(value any, style string) string {
+	items := t.toStringSlice(value)
+	switch style {
+	case "bullets":
+		for i, item := range items {
+			items[i] = "- " + item
+		}
+		return strings.Join(items, "\n")
+	case "sentences":
+		for i, item := range items {
+			if !strings.HasSuffix(item, ".") {
+				item += "."
+			}
+			items[i] = item
+		}
+		return strings.Join(items, " ")
+	default:
+		return "[" + strings.Join(items, " ") + "]"
+	}
+}
+
+func (t *TemplateContext) Bind(label string, value any) string {
+	if t.bindings == nil {
+		t.bindings = make(map[string]any)
+	}
+	t.bindings[label] = value
+	return ""
+}
+
+func (t *TemplateContext) Lookup(label string) any {
+	if label == "" {
+		return ""
+	}
+	if val, ok := t.bindings[label]; ok {
+		return val
+	}
+	if t.inputMap != nil {
+		if val, ok := t.inputMap[label]; ok {
+			return val
+		}
+	}
+	if t.Run != nil && t.Run.Chat != nil {
+		if v := t.Run.Chat.Fact(label); v != nil {
+			return v
+		}
+	}
+	return t.Fact(label)
+}
+
+// Equals of two case insensitive strings
+func (t *TemplateContext) Equals(value any, expected string) bool {
+	return strings.EqualFold(t.toString(value), expected)
+}
+
+func (t *TemplateContext) Has(value any, expected string) bool {
+	items := t.toStringSlice(value)
+	expectedLower := strings.ToLower(expected)
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(item), expectedLower) {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *TemplateContext) IsEmpty(value any) bool {
+	switch v := value.(type) {
+	case nil:
+		return true
+	case string:
+		return strings.TrimSpace(v) == ""
+	case []string:
+		return len(v) == 0
+	case []any:
+		return len(v) == 0
+	default:
+		return strings.TrimSpace(t.toString(v)) == ""
+	}
+}
+
+func (t *TemplateContext) toString(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func (t *TemplateContext) toStringSlice(value any) []string {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case []string:
+		return append([]string{}, v...)
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			out = append(out, t.toString(item))
+		}
+		return out
+	case string:
+		lines := strings.Split(v, "\n")
+		out := make([]string, 0, len(lines))
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			trimmed = strings.TrimPrefix(trimmed, "- ")
+			trimmed = strings.TrimPrefix(trimmed, "-")
+			trimmed = strings.TrimPrefix(trimmed, "* ")
+			trimmed = strings.TrimPrefix(trimmed, "*")
+			trimmed = strings.TrimSpace(trimmed)
+			if trimmed == "" {
+				continue
+			}
+			out = append(out, trimmed)
+		}
+		return out
+	default:
+		return []string{t.toString(v)}
+	}
+}
+
 func (t *TemplateContext) Start(name string) string {
 	if t.Run.Chat.IsValidStartAgent(name) {
 		t.Run.Chat.SetStartAgent(name)
@@ -119,9 +277,12 @@ func (r *RunContext) CallAI(ctx context.Context, agent *agents.Agent, prompt str
 }
 
 func (r *RunContext) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
-	client, err := agents.GetOpenAIClient()
+	cfg, err := config.Get()
 	if err != nil {
 		return "", err
+	}
+	if !cfg.OpenAI.Enabled {
+		return "", errors.New("OpenAI usage disabled via configuration")
 	}
 	tools := []openai.Tool{}
 	badListeners := []string{}
@@ -149,28 +310,27 @@ func (r *RunContext) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt
 		return "", fmt.Errorf("invalid listeners detected (missing description or input prompt): %s", strings.Join(badListeners, ", "))
 	}
 
-	req := openai.ChatCompletionRequest{
-		Model:       openai.GPT4o,
-		Temperature: 0.2,
-		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleUser, Content: prompt},
-		},
-		Tools:      tools,
-		ToolChoice: nil,
+	messages := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleUser, Content: prompt},
 	}
-	resp, err := client.CreateChatCompletion(ctx, req)
+	resp, err := r.invokeChatCompletion(ctx, cfg, agent, messages, tools)
 	if err != nil {
-		return "", fmt.Errorf("OpenAI API error: %w", err)
+		return "", err
 	}
 
-	if len(resp.Choices) > 0 && len(resp.Choices[0].Message.ToolCalls) > 0 {
-		return r.handleToolCalls(ctx, prompt, tools, resp.Choices[0].Message.ToolCalls, 1, []string{})
+	if len(resp.Choices) == 0 {
+		return "", errors.New("OpenAI API returned no choices")
 	}
 
-	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
+	firstChoice := resp.Choices[0]
+	if len(firstChoice.Message.ToolCalls) > 0 {
+		return r.handleToolCalls(ctx, cfg, agent, prompt, tools, firstChoice.Message.ToolCalls, 1, []string{})
+	}
+
+	return strings.TrimSpace(firstChoice.Message.Content), nil
 }
 
-func (r *RunContext) handleToolCalls(ctx context.Context, prompt string, tools []openai.Tool, initialToolCalls []openai.ToolCall, depth int, trace []string) (string, error) {
+func (r *RunContext) handleToolCalls(ctx context.Context, cfg *config.Config, agent *agents.Agent, prompt string, tools []openai.Tool, initialToolCalls []openai.ToolCall, depth int, trace []string) (string, error) {
 	if depth > 5 {
 		return "", fmt.Errorf(
 			"too many recursive tool call levels (depth=%d); possible infinite loop.\nTrace:\n%s",
@@ -229,21 +389,9 @@ func (r *RunContext) handleToolCalls(ctx context.Context, prompt string, tools [
 	}
 	messages = append(messages, functionResults...)
 
-	contReq := openai.ChatCompletionRequest{
-		Model:       openai.GPT4o,
-		Temperature: 0.2,
-		Messages:    messages,
-		Tools:       tools,
-	}
-
-	client, err := agents.GetOpenAIClient()
+	contResp, err := r.invokeChatCompletion(ctx, cfg, agent, messages, tools)
 	if err != nil {
 		return "", err
-	}
-
-	contResp, err := client.CreateChatCompletion(ctx, contReq)
-	if err != nil {
-		return "", fmt.Errorf("OpenAI API error on continuation: %w", err)
 	}
 
 	if len(contResp.Choices) > 0 {
@@ -257,11 +405,102 @@ func (r *RunContext) handleToolCalls(ctx context.Context, prompt string, tools [
 				)
 			}
 			// Recursive: new tool calls need handling
-			return r.handleToolCalls(ctx, prompt, tools, choice.Message.ToolCalls, depth+1, trace)
+			return r.handleToolCalls(ctx, cfg, agent, prompt, tools, choice.Message.ToolCalls, depth+1, trace)
 		}
 		return strings.TrimSpace(choice.Message.Content), nil
 	}
 	return "", errors.New("no choices returned from continuation OpenAI call")
+}
+
+func (r *RunContext) invokeChatCompletion(ctx context.Context, cfg *config.Config, agent *agents.Agent, messages []openai.ChatCompletionMessage, tools []openai.Tool) (openai.ChatCompletionResponse, error) {
+	if cfg.OpenAI.MaxCallsPerRun > 0 && r.openAICallCount >= cfg.OpenAI.MaxCallsPerRun {
+		return openai.ChatCompletionResponse{}, fmt.Errorf("OpenAI call limit (%d) reached for this run", cfg.OpenAI.MaxCallsPerRun)
+	}
+
+	requestCtx := ctx
+	var cancel context.CancelFunc
+	if timeout := cfg.OpenAI.RequestTimeout.Duration(); timeout > 0 {
+		requestCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
+	if cancel != nil {
+		defer cancel()
+	}
+
+	release, err := agents.AcquireOpenAISlot(requestCtx, cfg)
+	if err != nil {
+		return openai.ChatCompletionResponse{}, err
+	}
+	defer release()
+
+	client, err := agents.GetOpenAIClient()
+	if err != nil {
+		return openai.ChatCompletionResponse{}, err
+	}
+
+	req := agents.BuildChatCompletionRequest(cfg.OpenAI, messages, tools)
+
+	if cfg.OpenAI.LogPrompts {
+		logs.Infof("[openai] agent=%s request: %s", agentDisplayName(agent), formatMessagesForLog(messages))
+	}
+
+	r.openAICallCount++
+	resp, err := agents.CallChatCompletionWithRetry(requestCtx, client, req, cfg.OpenAI)
+	if err != nil {
+		return openai.ChatCompletionResponse{}, fmt.Errorf("OpenAI API error: %w", err)
+	}
+
+	if cfg.OpenAI.LogPrompts {
+		logs.Infof("[openai] agent=%s response: %s", agentDisplayName(agent), formatResponseForLog(resp))
+	}
+	return resp, nil
+}
+
+func agentDisplayName(agent *agents.Agent) string {
+	if agent == nil {
+		return "unknown"
+	}
+	if agent.Name != "" {
+		return agent.Name
+	}
+	return "anonymous"
+}
+
+func formatMessagesForLog(messages []openai.ChatCompletionMessage) string {
+	parts := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if len(msg.ToolCalls) > 0 {
+			names := make([]string, 0, len(msg.ToolCalls))
+			for _, call := range msg.ToolCalls {
+				names = append(names, call.Function.Name)
+			}
+			parts = append(parts, fmt.Sprintf("%s:tool-calls(%s)", msg.Role, strings.Join(names, ",")))
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s:%s", msg.Role, truncateForLog(msg.Content, 160)))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func formatResponseForLog(resp openai.ChatCompletionResponse) string {
+	if len(resp.Choices) == 0 {
+		return "no choices"
+	}
+	choice := resp.Choices[0]
+	if len(choice.Message.ToolCalls) > 0 {
+		names := make([]string, 0, len(choice.Message.ToolCalls))
+		for _, call := range choice.Message.ToolCalls {
+			names = append(names, call.Function.Name)
+		}
+		return fmt.Sprintf("tool_calls=%s", strings.Join(names, ","))
+	}
+	return truncateForLog(strings.TrimSpace(choice.Message.Content), 200)
+}
+
+func truncateForLog(s string, limit int) string {
+	if limit <= 0 || len(s) <= limit {
+		return s
+	}
+	return fmt.Sprintf("%s...(%d chars truncated)", s[:limit], len(s)-limit)
 }
 
 func buildToolParameters(agent *agents.Agent) map[string]interface{} {

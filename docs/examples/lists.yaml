@@ -1,0 +1,27 @@
+agents:
+  list_default:
+    description: Demonstrates `LIST <value>`.
+    inputs:
+      agenda:
+        description: Structured agenda items supplied by the caller.
+    template: |
+      Agenda overview:
+      {{ LIST INPUT agenda }}
+
+  list_bullets:
+    description: Demonstrates `LIST <value> OF BULLETS`.
+    inputs:
+      agenda:
+        description: Structured agenda items supplied by the caller.
+    template: |
+      Key agenda items:
+      {{ LIST INPUT agenda OF BULLETS }}
+
+  list_sentences:
+    description: Demonstrates `LIST <value> OF SENTENCES`.
+    inputs:
+      agenda:
+        description: Structured agenda items supplied by the caller.
+    template: |
+      Agenda summary:
+      {{ LIST INPUT agenda OF SENTENCES }}

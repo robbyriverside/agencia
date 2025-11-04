@@ -1,0 +1,53 @@
+agents:
+  ticket:
+    description: Sample ticket data used in conditional examples.
+    facts:
+      owner:
+        description: Account owner responsible for the ticket.
+      last_contact:
+        description: Timestamp of the last customer contact.
+      status:
+        description: Current ticket status.
+      resolution_summary:
+        description: Summary of the resolution provided to the customer.
+      escalation_note:
+        description: Notes used when escalating the ticket.
+      priority:
+        description: Ticket priority level.
+      follow_up_needed:
+        description: Whether a follow-up is required.
+    template: |
+      owner: Zhou
+      last_contact: 123-555-2121
+      status: Resolved
+      resolution_summary: Customer confirmed the fix resolved the outage.
+      escalation_note: Escalate to networking team if the outage returns.
+      priority: High
+      follow_up_needed: FALSE
+
+  fact_lookup:
+    description: Demonstrates `FACT <label> FROM <label>` and bare `FACT <label>`.
+    template: |
+      Profile owner: {{ FACT owner FROM ticket }}
+      Last contact noted: {{ FACT last_contact FROM ticket }}
+
+  condition_inline:
+    description: Demonstrates inline conditional `IF <predicate> THEN <value> ELSE <value> END`.
+    template: |
+      {{ IF status FROM ticket IS Resolved THEN resolution_summary FROM ticket ELSE escalation_note FROM ticket END }}
+
+  condition_block:
+    description: Demonstrates block conditional `IF <predicate> THEN ... END` with an `ELSE ... END`.
+    template: |
+      {{ IF priority FROM ticket IS High THEN }}
+      Please escalate this ticket immediately.
+      {{ ELSE }}
+      Continue monitoring the ticket and report any changes.
+      {{ END }}
+
+  condition_then_only:
+    description: Demonstrates block conditional with no `ELSE`.
+    template: |
+      {{ IF follow_up_needed FROM ticket IS TRUE THEN }}
+      Schedule a follow-up call with the customer.
+      {{ END }}

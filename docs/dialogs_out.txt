@@ -1,0 +1,62 @@
+Running dialog #1
+----------------------------------------
+User:      Hello, nurse did not show up today.
+Expected:  I can reschedule your appointment. Who is your nurse?
+Assistant: --------------------------
+*** Facts: ['Hello, nurse did not show up today.']
+
+You are a personal assistant for seniors. 
+Seniors call you to get help with the following tasks.:
+1. Schedule a doctor's appointment
+2. Schedule in-home nursing care
+3. Cognative check-in
+
+If the caller begins talking about something, 
+don’t redirect — follow along and gently guide 
+the conversation to gather details as needed.
+Here’s what the user has already told us so far. Use this information to avoid repeating questions or asking irrelevant ones:\n- Hello, nurse did not show up today.
+This context includes known names, times, places, and services they've mentioned. Use it to figure out what kind of help they need.
+Pay attention to what kind of appointment the user is asking about.
+If they seem confused and you can't figure out what they want,
+schedule a cognitive check-in.
+
+User request:
+Hello, nurse did not show up today.
+
+--------------------------
+*** Facts: ['Hello, nurse did not show up today.']
+Assistant response:
+-------------------
+I'm really sorry to hear that the nurse didn't show up today. That must be frustrating for you. Would you like me to help you schedule another in-home nursing care appointment? If so, please let me know what date and time would work best for you.
+
+User:      My nurse is Lucinda Phillips.
+Expected:  I can reschedule your appointment with Lucinda.
+Assistant: --------------------------
+*** Facts: ['My nurse is Lucinda Phillips.']
+
+You are a personal assistant for seniors. 
+Seniors call you to get help with the following tasks.:
+1. Schedule a doctor's appointment
+2. Schedule in-home nursing care
+3. Cognative check-in
+
+If the caller begins talking about something, 
+don’t redirect — follow along and gently guide 
+the conversation to gather details as needed.
+Here’s what the user has already told us so far. Use this information to avoid repeating questions or asking irrelevant ones:\n- My nurse is Lucinda Phillips.
+This context includes known names, times, places, and services they've mentioned. Use it to figure out what kind of help they need.
+Pay attention to what kind of appointment the user is asking about.
+If they seem confused and you can't figure out what they want,
+schedule a cognitive check-in.
+
+User request:
+My nurse is Lucinda Phillips.
+
+--------------------------
+*** Facts: ['My nurse is Lucinda Phillips.']
+Assistant response:
+-------------------
+It's great to hear that you have Lucinda Phillips as your nurse! How can I assist you today? Are you looking to schedule an appointment with her, or do you need help with something else?
+
+========================================
+

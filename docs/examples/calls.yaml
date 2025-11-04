@@ -1,0 +1,92 @@
+agents:
+  load_profile:
+    description: Stub agent that would fetch profile information.
+    template: |
+      name: Ada Lovelace
+      role: Principal Engineer
+      focus: Quarterly roadmap review
+
+  summarize_profile:
+    description: Stub agent that summarizes profile text.
+    template: |
+      Summary: Key accomplishments and upcoming milestones captured.
+
+  profile.summarize_profile:
+    description: Example of calling an agent from a named library.
+    template: |
+      Library summary: Consolidated achievements for the quarter.
+
+  gather_tasks:
+    description: Stub agent that prepares a list of tasks.
+    facts:
+      tasks:
+        description: Tasks to follow up on.
+    template: |
+      tasks:
+        - Align roadmap
+        - Confirm staffing
+        - Publish summary
+
+  notify_team:
+    description: Stub agent that would notify a team about tasks.
+    template: |
+      Notification sent to: delivery@contoso.example
+
+  render_tasks:
+    description: Formats tasks as a bullet list.
+    template: |
+      - Align roadmap
+      - Confirm staffing
+      - Publish summary
+
+  profile_focus:
+    description: Provides a default focus item for demonstration.
+    template: |
+      Prepare quarterly roadmap summary
+
+  call_simple:
+    description: Demonstrates `CALL <label>`.
+    template: |
+      {{ CALL load_profile }}
+
+  call_with_from:
+    description: Demonstrates `CALL <label> FROM <label>`.
+    template: |
+      {{ USING profile FROM CALL load_profile }}
+      {{ CALL summarize_profile FROM profile }}
+
+  call_with_value:
+    description: Demonstrates `CALL <label> WITH <value>`.
+    template: |
+      {{ USING focus FROM CALL profile_focus }}
+      {{ CALL summarize_profile WITH THE focus }}
+
+  call_with_block:
+    description: Demonstrates `CALL <label> WITH ... END`.
+    template: |
+      {{ CALL summarize_profile WITH }}
+           This is a quick summary block generated inline.
+           It can span multiple lines.
+      {{ END }}
+
+  call_on_list:
+    description: Demonstrates `CALL <label> ON LIST <value>`.
+    template: |
+      {{ CALL gather_tasks }}
+      {{ CALL notify_team ON LIST FACT tasks FROM gather_tasks }}
+
+  call_on_list_block:
+    description: Demonstrates `CALL <label> ON LIST ... END`.
+    template: |
+      {{ CALL notify_team ON LIST }}
+           - Align roadmap
+           - Confirm staffing
+           - Publish summary
+      {{ END }}
+
+  call_on_list_nested:
+    description: Demonstrates `CALL <label> ON LIST ... END` with an inner call producing the list.
+    template: |
+      {{ CALL notify_team ON LIST }}
+           {{ CALL render_tasks }}
+      {{ END }}

@@ -75,6 +75,52 @@ func TestChatClientReconnectAndClose(t *testing.T) {
 	}
 }
 
+func TestChatClientAutoCloseAfterInactivity(t *testing.T) {
+	oldTimeout := chatInactivityTimeout
+	chatInactivityTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { chatInactivityTimeout = oldTimeout })
+
+	oldStore := chatSessions
+	chatSessions = newChatSessionStore()
+	defer func() { chatSessions = oldStore }()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/chat", ChatSessionHandler)
+	mux.HandleFunc("/api/closechat", CloseChatHandler)
+	mux.HandleFunc("/api/facts", FactsHandler)
+	mux.HandleFunc("/api/loadfacts", LoadFactsHandler)
+
+	server := startTestServer(t, mux)
+	if server == nil {
+		return
+	}
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/chat"
+
+	client := &ChatClient{
+		WSURL:    wsURL,
+		HTTPBase: server.URL,
+		Agent:    "test",
+		Spec:     minimalSpec,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	require.NoError(t, client.Connect(ctx))
+	chatID := client.ChatID
+	require.NotEmpty(t, chatID)
+
+	require.Eventually(t, func() bool {
+		if client.ChatID != "" {
+			return false
+		}
+		_, ok := chatSessions.get(chatID)
+		return !ok
+	}, time.Second, 25*time.Millisecond, "expected chat to be auto-closed after inactivity")
+}
+
 func startTestServer(t *testing.T, handler http.Handler) *httptest.Server {
 	t.Helper()
 	var srv *httptest.Server

@@ -8,12 +8,17 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 var ErrChatNotConnected = errors.New("chat client not connected")
+
+const defaultChatInactivityTimeout = 30 * time.Minute
+
+var chatInactivityTimeout = defaultChatInactivityTimeout
 
 // ChatClient manages a websocket chat session and handles reconnect/closure semantics.
 type ChatClient struct {
@@ -25,6 +30,11 @@ type ChatClient struct {
 
 	httpClient *http.Client
 	conn       *websocket.Conn
+
+	activityMu     sync.Mutex
+	lastActivity   time.Time
+	inactivityCh   chan struct{}
+	inactivityStop context.CancelFunc
 }
 
 // Connect starts or resumes a chat session. If ChatID is already populated it will
@@ -69,6 +79,8 @@ func (c *ChatClient) Connect(ctx context.Context) error {
 
 	c.ChatID = chatID
 	c.conn = conn
+	c.touchActivity()
+	c.startInactivityWatcher()
 	return nil
 }
 
@@ -119,7 +131,11 @@ func (c *ChatClient) Send(message string) error {
 	payload := map[string]any{
 		"message": message,
 	}
-	return c.conn.WriteJSON(payload)
+	if err := c.conn.WriteJSON(payload); err != nil {
+		return err
+	}
+	c.touchActivity()
+	return nil
 }
 
 // Receive blocks until a message arrives from the websocket connection.
@@ -152,6 +168,9 @@ func (c *ChatClient) Receive(ctx context.Context) (map[string]any, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case res := <-ch:
+		if res.err == nil {
+			c.touchActivity()
+		}
 		return res.data, res.err
 	}
 }
@@ -172,6 +191,7 @@ func (c *ChatClient) CloseChat(ctx context.Context) error {
 		return nil
 	}
 
+	c.stopInactivityWatcher()
 	_ = c.Disconnect()
 
 	base := strings.TrimRight(c.HTTPBase, "/")
@@ -197,4 +217,79 @@ func (c *ChatClient) CloseChat(ctx context.Context) error {
 
 	c.ChatID = ""
 	return nil
+}
+
+func (c *ChatClient) touchActivity() {
+	c.activityMu.Lock()
+	c.lastActivity = time.Now()
+	ch := c.inactivityCh
+	c.activityMu.Unlock()
+
+	if ch != nil {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (c *ChatClient) startInactivityWatcher() {
+	c.activityMu.Lock()
+	if c.inactivityStop != nil {
+		c.inactivityStop()
+	}
+	if c.lastActivity.IsZero() {
+		c.lastActivity = time.Now()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	c.inactivityStop = cancel
+	ch := make(chan struct{}, 1)
+	c.inactivityCh = ch
+	c.activityMu.Unlock()
+
+	if chatInactivityTimeout <= 0 {
+		return
+	}
+
+	go c.watchInactivity(ctx, ch)
+}
+
+func (c *ChatClient) stopInactivityWatcher() {
+	c.activityMu.Lock()
+	if c.inactivityStop != nil {
+		c.inactivityStop()
+		c.inactivityStop = nil
+	}
+	c.inactivityCh = nil
+	c.activityMu.Unlock()
+}
+
+func (c *ChatClient) watchInactivity(ctx context.Context, activityCh <-chan struct{}) {
+	timer := time.NewTimer(chatInactivityTimeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-activityCh:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(chatInactivityTimeout)
+		case <-timer.C:
+			c.activityMu.Lock()
+			since := time.Since(c.lastActivity)
+			c.activityMu.Unlock()
+			if since >= chatInactivityTimeout {
+				if err := c.CloseChat(context.Background()); err != nil {
+					return
+				}
+			}
+			return
+		}
+	}
 }

@@ -1,0 +1,80 @@
+agents:
+  nursing:
+    description: Scheduler for in-home nursing services for seniors
+    inputs:
+      date:
+        description: Date for the appointment
+      time:
+        description: Time for the appointment
+      nurse:
+        description: Nurse's name
+      address:
+        description: Home address of the user
+    template: |
+      I have scheduled your appointment with {{ INPUT nurse }} on {{ INPUT date }} at {{ INPUT time }}.
+      The appointment will be held at {{ INPUT address }}.
+      {{ IF INPUT date IS EMPTY THEN }}
+        Please check for the next available time slots.
+      {{ END }}
+      {{ IF INPUT nurse IS EMPTY THEN }}
+        Ask about available nurses in the user's area.
+      {{ END }}
+
+  appointments:
+    description: Schedule a doctor's appointment
+    inputs:
+      date:
+        description: Date for the appointment
+      time:
+        description: Time for the appointment
+      doctor:
+        description: Doctor's name
+      location:
+        description: Location of the appointment
+    template: |
+      I have scheduled your appointment with {{ INPUT doctor }} on {{ INPUT date }} at {{ INPUT time }}.
+      The appointment will be held at {{ INPUT location }}.
+
+  cognitive:
+    description: Ask the user about their cognitive health
+    role: cognitive_evaluator
+    inputs:
+      name:
+        description: Name of the user
+        required: false
+    prompt: |
+      Evaluate this user input. Ask a series of questions to assess the user's cognitive health.
+      {{ IF information FROM mainmenu IS NOT EMPTY THEN }}
+        Here is what we know so far:
+        {{ LIST information OF BULLETS }}
+      {{ END }}
+      Use the following information to guide your questions:
+      {{ INPUT }}
+
+  mainmenu:
+    facts:
+      information:
+        description: |
+          Collection of partial information shared by the user over time.
+          Collect details naturally and gently, even if you don't have all the information yet.
+          Add each new item into the list, while retaining prior notes.
+        type: list
+        add: true
+    prompt: |
+      You are a personal assistant for seniors.
+      Seniors call you to get help with:
+      - Scheduling doctor's appointments
+      - Scheduling in-home nursing care
+      - Scheduling cognitive check-ins
+
+      {{ IF information FROM mainmenu IS NOT EMPTY THEN }}
+        Here’s what the user has already told us.
+        {{ LIST information OF BULLETS }}
+      {{ END }}
+      Pay attention to what kind of appointment the user is asking about.
+      User request:
+      {{ INPUT }}
+    listeners:
+      - appointments
+      - nursing
+      - cognitive

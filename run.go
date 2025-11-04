@@ -8,17 +8,19 @@ import (
 	"strings"
 
 	"github.com/robbyriverside/agencia/agents"
+	"github.com/robbyriverside/agencia/parley"
 	"github.com/robbyriverside/agencia/utils"
 	"gopkg.in/yaml.v3"
 )
 
 type RunContext struct {
-	IsPrint    bool
-	Chat       *Chat
-	Registry   *Registry
-	Card       *TraceCard     // prompt used for this run
-	Depth      int            // current depth of nested CallAgent invocations
-	LocalFacts map[string]any // All facts stored locally during this run
+	IsPrint         bool
+	Chat            *Chat
+	Registry        *Registry
+	Card            *TraceCard     // prompt used for this run
+	Depth           int            // current depth of nested CallAgent invocations
+	LocalFacts      map[string]any // All facts stored locally during this run
+	openAICallCount int
 }
 
 func NewRun(reg *Registry, chat *Chat) *RunContext {
@@ -461,7 +463,21 @@ func (r *RunContext) renderFinalPrompt(ctx context.Context, template string, age
 	if err != nil {
 		return "", err
 	}
-	tmpl, err := utils.TemplateParse(agent.Name, template)
+	useGo := false
+	trimmed := strings.TrimLeft(template, "\n\r\t ")
+	if strings.HasPrefix(trimmed, "//Use Go") {
+		useGo = true
+		template = removeFirstLine(template)
+	}
+	compiled := template
+	if !useGo {
+		translated, err := parley.Translate(template)
+		if err != nil {
+			return "", err
+		}
+		compiled = translated
+	}
+	tmpl, err := utils.TemplateParse(agent.Name, compiled)
 	if err != nil {
 		return "", fmt.Errorf("template parse error: %w", err)
 	}
@@ -547,4 +563,15 @@ func (r *RunContext) AssignLocalFact(agent *agents.Agent, name string, v any) {
 	} else {
 		r.LocalFacts[name] = v
 	}
+}
+
+func removeFirstLine(s string) string {
+	idx := strings.IndexAny(s, "\r\n")
+	if idx == -1 {
+		return ""
+	}
+	for idx < len(s) && (s[idx] == '\n' || s[idx] == '\r') {
+		idx++
+	}
+	return s[idx:]
 }

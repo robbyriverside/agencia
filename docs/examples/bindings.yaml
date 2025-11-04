@@ -1,0 +1,22 @@
+agents:
+  using_direct_value:
+    description: Demonstrates `USING <label> FROM <value>` with `THE <label>`.
+    template: |
+      {{ USING summary FROM CALL summarize_notes }}
+      Summary preview: {{ THE summary }}
+
+  using_block_value:
+    description: Demonstrates `USING <label> FROM ... END` with `USE <label>`.
+    template: |
+      {{ USING intro FROM
+           Dear team,
+           Thank you for the timely updates today.
+      END }}
+      {{ USE intro }}
+
+  using_chain:
+    description: Demonstrates combining `USING` with additional calls.
+    template: |
+      {{ USING notes FROM CALL gather_updates }}
+      {{ USING recap FROM CALL summarize WITH THE notes }}
+      Daily recap: {{ THE recap }}

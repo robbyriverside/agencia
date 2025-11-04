@@ -1,0 +1,31 @@
+// Refreshed forms to align with label-driven updates.
+// Use "..." to denote a block body captured between the opening directive and END.
+
+INPUT
+INPUT <label>
+
+CALL <label>
+CALL <label> FROM <label>
+CALL <label> WITH <value>
+CALL <label> WITH ... END
+CALL <label> ON LIST <value>
+CALL <label> ON LIST ... END
+
+FACT <label> FROM <label>
+FACT <label>
+
+IF <predicate> THEN <value> ELSE <value> END
+IF <predicate> THEN ... END
+ELSE ... END
+
+LIST <value>
+LIST <value> OF BULLETS
+LIST <value> OF SENTENCES
+
+USING <label> FROM <value>
+USING <label> FROM ... END
+
+THE <label>
+USE <label>
+
+-----------------------------------------

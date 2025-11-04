@@ -1,0 +1,104 @@
+# Keywords are case-insensitive in Parley templates.
+
+<template> ::= { <text> | <directive> }
+
+<directive> ::= "{{" <statement> "}}"
+
+<statement> ::= <input-stmt>
+              | <call-stmt>
+              | <fact-stmt>
+              | <if-inline-stmt>
+              | <if-start-stmt>
+              | <else-stmt>
+              | <endif-stmt>
+              | <list-stmt>
+              | <map-stmt>
+              | <collect-stmt>
+              | <using-inline-stmt>
+              | <using-block-start>
+              | <end-stmt>
+              | <binding-stmt>
+
+<input-stmt> ::= "INPUT" [ <identifier> ]
+
+<call-stmt> ::= "CALL" <path> [ "WITH" <argument> ]
+
+<fact-stmt> ::= "FACT" <path> "FROM" <path>
+
+<if-inline-stmt> ::= "IF" <predicate> "THEN" <branch-expression> "ELSE" <branch-expression> "END"
+
+<if-start-stmt> ::= "IF" <predicate> "THEN" [ <branch-expression> ]
+
+<else-stmt> ::= "ELSE" [ <branch-expression> ]
+
+<endif-stmt> ::= "END"
+
+<list-stmt> ::= "LIST" <list-source> [ "AS" <list-style> ]
+
+<map-stmt> ::= "MAP" <path> <branch-expression>
+
+<collect-stmt> ::= "COLLECT" <path> <branch-expression> [ "AND" "FLATTEN" ]
+
+<using-inline-stmt> ::= "USING" <identifier> "FROM" <branch-expression>
+
+<using-block-start> ::= "USING" <identifier> "FROM"
+
+<end-stmt> ::= "END"
+
+<binding-stmt> ::= <binding-ref>
+
+<branch-expression> ::= <input-stmt>
+                      | <call-stmt>
+                      | <fact-ref>
+                      | <binding-ref>
+                      | <list-stmt>
+                      | <map-stmt>
+                      | <collect-stmt>
+                      | <literal>
+
+<argument> ::= <input-stmt>
+             | <fact-ref>
+             | <binding-ref>
+             | <literal>
+
+<predicate> ::= <fact-ref> "IS" <value>
+              | <fact-ref> "IS" "NOT" <value>
+              | <fact-ref> "HAS" <value>
+              | <fact-ref> "IS" "EMPTY"
+              | <fact-ref> "IS" "NOT" "EMPTY"
+
+<value> ::= <input-stmt>
+          | <fact-ref>
+          | <binding-ref>
+          | <literal>
+
+<fact-ref> ::= [ "FACT" ] <path> "FROM" <path>
+
+<binding-ref> ::= ("THE" | "USE") <identifier>
+
+<list-style> ::= "BULLETS"
+               | "SENTENCES"
+
+<list-source> ::= <path>
+                | "INPUT" [ <identifier> ]
+
+<path> ::= <identifier> { "." <identifier> }
+
+<literal> ::= <string>
+            | <identifier>
+
+<identifier> ::= <letter> { <letter> | <digit> | "_" | "-" }
+
+<string> ::= "\"" { <string-char> } "\""
+
+<text> ::= <text-char> { <text-char> }
+# Note: the lexer should treat `{{` as the start of a directive unless it is
+# protected by quoting or escaping rules in the surrounding template language.
+
+<letter> ::= "A" | "B" | ... | "Z" | "a" | "b" | ... | "z"
+
+<digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+
+<string-char> ::= any character except "\"" and newline
+
+<text-char> ::= any character
