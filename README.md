@@ -11,6 +11,29 @@
 
 ---
 
+## Programmatic Runs
+
+Use `SpecRunner` to exercise a spec without starting the websocket/chat server:
+
+```go
+runner, _ := agencia.NewSpecRunner(agencia.SpecRunnerConfig{
+    SpecFile:   "agentic.yaml",
+    StartAgent: "concierge",
+    PrintFacts: true,
+})
+
+resp, err := runner.Run(context.Background(), "Summarize the latest status.")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(resp)
+```
+
+Call `runner.Chat(context.Background())` to open an interactive CLI session that reuses the same
+chat state, facts, and observations.
+
+---
+
 **Author:** Rob Farrow  
 **Created:** April 2025  
 **Status:** Private — For Personal Reference Only
@@ -72,4 +95,3 @@ Agencia is what enables every product I will create.
 > “Let others chase demos. I’m building the machine that builds the future.”
 
 — Rob Farrow
-

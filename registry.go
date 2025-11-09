@@ -88,47 +88,60 @@ func (r *Registry) RegisterAgent(agent *agents.Agent) {
 	r.Agents[agent.Name] = agent
 }
 
-// Run is the main entrypoint for calling an agent
-func (r *Registry) Run(ctx context.Context, chat *Chat, name string, input string) (string, *TraceCard) {
-	// If input is a JSON object with a "message" key, extract and use only that value
-	if strings.HasPrefix(input, "{") {
-		var tmp map[string]interface{}
-		if err := json.Unmarshal([]byte(input), &tmp); err == nil {
+func normalizeChatInput(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if strings.HasPrefix(trimmed, "{") {
+		var tmp map[string]any
+		if err := json.Unmarshal([]byte(trimmed), &tmp); err == nil {
 			if msg, ok := tmp["message"].(string); ok {
-				input = msg
+				return msg
 			}
 		}
 	}
+	return input
+}
+
+func sanitizeAgentOutput(out string) string {
+	if utf8.ValidString(out) {
+		return out
+	}
+	return strings.ToValidUTF8(out, "�")
+}
+
+func (r *Registry) runAgent(ctx context.Context, chat *Chat, name string, input string, isPrint bool) (AgentResult, *TraceCard) {
 	run := NewRun(r, chat)
+	run.IsPrint = isPrint
 	res := run.CallAgent(ctx, name, input)
-	if res.Error != nil {
-		logs.Error("[AGENT ERROR]", res.Error)
-		return res.Error.Error(), run.Card
-	}
-	if !res.Ran {
-		logs.Info("[INFO] Agent did not run (skipped).", res.AgentName)
-		return "did not run", run.Card
-	}
-	out := res.Output
-	// logs.Info("[AGENT OUTPUT]", out)
-	if !utf8.ValidString(out) {
-		out = strings.ToValidUTF8(out, "�")
-	}
 	if chat != nil {
-		agent := chat.Registry.Agents[chat.StartAgent]
-		if agent != nil {
-			run.ExtractAgentMemory(ctx, agent, input, out)
+		if res.Ran && res.Error == nil && chat.Registry != nil {
+			if agent := chat.Registry.Agents[chat.StartAgent]; agent != nil {
+				run.ExtractAgentMemory(ctx, agent, input, sanitizeAgentOutput(res.Output))
+			}
 		}
 		chat.Cards = append(chat.Cards, run.Card)
 	}
-	return out, run.Card
+	return res, run.Card
+}
+
+// Run is the main entrypoint for calling an agent
+func (r *Registry) Run(ctx context.Context, chat *Chat, name string, input string) (string, *TraceCard) {
+	input = normalizeChatInput(input)
+	res, card := r.runAgent(ctx, chat, name, input, false)
+	if res.Error != nil {
+		logs.Error("[AGENT ERROR]", res.Error)
+		return res.Error.Error(), card
+	}
+	if !res.Ran {
+		logs.Info("[INFO] Agent did not run (skipped).", res.AgentName)
+		return "did not run", card
+	}
+	return sanitizeAgentOutput(res.Output), card
 }
 
 // RunPrint is the main entrypoint for calling an agent from the CLI
 func (r *Registry) RunPrint(ctx context.Context, chat *Chat, name string, input string) error {
-	run := NewRun(r, chat)
-	run.IsPrint = true
-	res := run.CallAgent(ctx, name, input)
+	input = normalizeChatInput(input)
+	res, card := r.runAgent(ctx, chat, name, input, true)
 	if res.Error != nil {
 		return fmt.Errorf("[AGENT ERROR] %v", res.Error)
 	}
@@ -136,12 +149,8 @@ func (r *Registry) RunPrint(ctx context.Context, chat *Chat, name string, input 
 		fmt.Printf("[INFO] Agent '%s' did not run (skipped).\n", res.AgentName)
 		return nil
 	}
-	out := res.Output
-	if !utf8.ValidString(out) {
-		out = strings.ToValidUTF8(out, "�")
-	}
+	out := sanitizeAgentOutput(res.Output)
 	fmt.Println(out)
-	card := run.Card
 	if card != nil {
 		card.SaveMarkdown("trace.md", !IsVerbose())
 	}
