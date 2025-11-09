@@ -429,6 +429,18 @@ as `IS`, `IS NOT`, `HAS`, and `EMPTY` map to equality, inequality, membership, a
 When `THEN` (or `ELSE`) is left hanging—`THEN }}`—the block that follows becomes the value for that
 branch, up to the matching `ELSE` or closing `END`.
 
+Add intermediate checks with `ELSE IF <predicate> THEN <value>`.  Each `ELSE IF` runs only when all
+previous predicates fail.  Inline expressions and block forms both support chained branches:
+
+```parley
+{{ IF status IN ticket IS Closed
+     THEN FACT resolution_summary IN ticket
+     ELSE IF priority IN ticket IS High
+     THEN FACT escalation_note IN ticket
+     ELSE FACT last_contact IN ticket
+   END }}
+```
+
 ```parley
 {{ IF language FROM concierge IS French
      THEN salutation FROM concierge
@@ -470,6 +482,19 @@ Bonjour!
 {{ else }}
 Howdy!
 {{ end }}
+```
+
+Insert `{{ ELSE IF <predicate> THEN }}` between the opening `IF` and the final `ELSE`/`END` when
+you need more than two branches:
+
+```parley
+{{ IF status IN ticket IS Closed THEN }}
+Archive the ticket.
+{{ ELSE IF priority IN ticket IS High THEN }}
+Escalate to the on-call engineer.
+{{ ELSE }}
+Continue monitoring until the next update.
+{{ END }}
 ```
 
 Or mix in previously bound values without a block.  Assuming `greeting` and `fallback` were captured

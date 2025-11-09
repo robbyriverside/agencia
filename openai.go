@@ -10,6 +10,7 @@ import (
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/robbyriverside/agencia/config"
 	"github.com/robbyriverside/agencia/logs"
+	"github.com/robbyriverside/agencia/parley"
 	"github.com/robbyriverside/agencia/utils"
 	"github.com/sashabaranov/go-openai"
 	"gopkg.in/yaml.v3"
@@ -119,7 +120,7 @@ func (t *TemplateContext) CallWith(agent string, value any) string {
 }
 
 func (t *TemplateContext) CallOnList(agent string, values any) string {
-	items := t.toStringSlice(values)
+	items := t.listWithStyle(values, "bullets")
 	if len(items) == 0 {
 		return ""
 	}
@@ -138,23 +139,23 @@ func (t *TemplateContext) CallOnList(agent string, values any) string {
 }
 
 func (t *TemplateContext) List(value any, style string) string {
-	items := t.toStringSlice(value)
-	switch style {
+	return t.ListFormat(value, style, style)
+}
+
+func (t *TemplateContext) ListFormat(value any, readStyle, writeStyle string) string {
+	items := t.listWithStyle(value, readStyle)
+	switch writeStyle {
+	case "lines":
+		return strings.Join(items, "\n")
+	case "paragraphs":
+		return strings.Join(items, "\n\n")
 	case "bullets":
+		fallthrough
+	default:
 		for i, item := range items {
 			items[i] = "- " + item
 		}
 		return strings.Join(items, "\n")
-	case "sentences":
-		for i, item := range items {
-			if !strings.HasSuffix(item, ".") {
-				item += "."
-			}
-			items[i] = item
-		}
-		return strings.Join(items, " ")
-	default:
-		return "[" + strings.Join(items, " ") + "]"
 	}
 }
 
@@ -192,7 +193,7 @@ func (t *TemplateContext) Equals(value any, expected string) bool {
 }
 
 func (t *TemplateContext) Has(value any, expected string) bool {
-	items := t.toStringSlice(value)
+	items := t.listWithStyle(value, "bullets")
 	expectedLower := strings.ToLower(expected)
 	for _, item := range items {
 		if strings.Contains(strings.ToLower(item), expectedLower) {
@@ -229,39 +230,117 @@ func (t *TemplateContext) toString(value any) string {
 }
 
 func (t *TemplateContext) toStringSlice(value any) []string {
+	return t.listWithStyle(value, "bullets")
+}
+
+func (t *TemplateContext) Eval(block string) string {
+	translated, err := parley.Translate(block)
+	if err != nil {
+		return fmt.Sprintf("[parley error: %v]", err)
+	}
+	tmpl, err := utils.TemplateParse("parley-block", translated)
+	if err != nil {
+		return fmt.Sprintf("[parley parse error: %v]", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, t); err != nil {
+		return fmt.Sprintf("[parley exec error: %v]", err)
+	}
+	return strings.TrimSpace(buf.String())
+}
+
+func (t *TemplateContext) listWithStyle(value any, style string) []string {
+	style = strings.ToLower(style)
 	switch v := value.(type) {
 	case nil:
 		return nil
 	case []string:
-		return append([]string{}, v...)
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			out = append(out, item)
+		}
+		return out
 	case []any:
 		out := make([]string, 0, len(v))
 		for _, item := range v {
-			out = append(out, t.toString(item))
+			text := strings.TrimSpace(t.toString(item))
+			if text == "" {
+				continue
+			}
+			out = append(out, text)
 		}
 		return out
 	case string:
-		lines := strings.Split(v, "\n")
+		return parseListString(v, style)
+	default:
+		text := strings.TrimSpace(t.toString(v))
+		if text == "" {
+			return nil
+		}
+		return []string{text}
+	}
+}
+
+func parseListString(input, style string) []string {
+	input = strings.ReplaceAll(input, "\r\n", "\n")
+	switch style {
+	case "lines":
+		lines := strings.Split(input, "\n")
 		out := make([]string, 0, len(lines))
 		for _, line := range lines {
 			trimmed := strings.TrimSpace(line)
 			if trimmed == "" {
 				continue
 			}
-			trimmed = strings.TrimPrefix(trimmed, "- ")
-			trimmed = strings.TrimPrefix(trimmed, "-")
-			trimmed = strings.TrimPrefix(trimmed, "* ")
-			trimmed = strings.TrimPrefix(trimmed, "*")
-			trimmed = strings.TrimSpace(trimmed)
+			out = append(out, trimmed)
+		}
+		return out
+	case "paragraphs":
+		return splitParagraphs(input)
+	default: // bullets
+		lines := strings.Split(input, "\n")
+		out := make([]string, 0, len(lines))
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			if !strings.HasPrefix(trimmed, "-") {
+				continue
+			}
+			trimmed = strings.TrimSpace(trimmed[1:])
 			if trimmed == "" {
 				continue
 			}
 			out = append(out, trimmed)
 		}
 		return out
-	default:
-		return []string{t.toString(v)}
 	}
+}
+
+func splitParagraphs(input string) []string {
+	lines := strings.Split(input, "\n")
+	paragraphs := []string{}
+	current := []string{}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if len(current) > 0 {
+				paragraphs = append(paragraphs, strings.Join(current, " "))
+				current = nil
+			}
+			continue
+		}
+		current = append(current, trimmed)
+	}
+	if len(current) > 0 {
+		paragraphs = append(paragraphs, strings.Join(current, " "))
+	}
+	return paragraphs
 }
 
 func (t *TemplateContext) Start(name string) string {

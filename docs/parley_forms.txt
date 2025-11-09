@@ -4,28 +4,36 @@
 INPUT
 INPUT <label>
 
-CALL <label>
-CALL <label> FROM <label>
-CALL <label> WITH <value>
-CALL <label> WITH ... END
-CALL <label> ON LIST <value>
-CALL <label> ON LIST ... END
+SEND <label> LIST <value>  // send multiple messages to an agent
+SEND <label> LIST ... END   // send multiple messages in the list block
+SEND <label> MESSAGE <value>  // send a single message to an agent
+SEND <label> MESSAGE ... END  // send message in block
 
-FACT <label> FROM <label>
+SEND <label> IN <label> LIST <value>  // send multiple messages to an agent in a library
+SEND <label> IN <label> LIST ... END   // send multiple messages in the list block
+SEND <label> IN <label> MESSAGE <value>  // send a single message to an agent in a library
+SEND <label> IN <label> MESSAGE ... END  // send message in block
+
+FACT <label> IN <label>
 FACT <label>
 
-IF <predicate> THEN <value> ELSE <value> END
+IF <predicate> THEN <value> ELSE <value>  // statement does not need END, like a block
 IF <predicate> THEN ... END
+ELSE IF <predicate> THEN ... END
 ELSE ... END
 
-LIST <value>
-LIST <value> OF BULLETS
-LIST <value> OF SENTENCES
+LIST <value>              // read bullets, write bullets
+LIST <value> FROM BULLETS // explicit synonym for the default
+LIST <value> FROM LINES   // read lines (single newline), write bullets
+LIST <value> FROM PARAGRAPHS // read paragraphs (blank line separated), write bullets
 
-USING <label> FROM <value>
-USING <label> FROM ... END
+LIST <value> AS BULLETS // write bullets (default)
+LIST <value> AS LINES   // read bullets, write single-line entries
+LIST <value> AS PARAGRAPHS // read bullets, write paragraphs
 
-THE <label>
+LET <label> BE <value>
+LET <label> BE ... END
+
 USE <label>
 
 -----------------------------------------

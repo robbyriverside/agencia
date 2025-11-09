@@ -1,6 +1,6 @@
 agents:
-  list_default:
-    description: Demonstrates `LIST <value>`.
+  list_bullets:
+    description: Default bullet output (`LIST <value>`).
     inputs:
       agenda:
         description: Structured agenda items supplied by the caller.
@@ -8,20 +8,30 @@ agents:
       Agenda overview:
       {{ LIST INPUT agenda }}
 
-  list_bullets:
-    description: Demonstrates `LIST <value> OF BULLETS`.
+  list_lines:
+    description: Demonstrates `LIST <value> AS LINES`.
     inputs:
       agenda:
         description: Structured agenda items supplied by the caller.
     template: |
-      Key agenda items:
-      {{ LIST INPUT agenda OF BULLETS }}
+      Agenda as lines:
+      {{ LIST INPUT agenda AS LINES }}
 
-  list_sentences:
-    description: Demonstrates `LIST <value> OF SENTENCES`.
+  list_paragraphs:
+    description: Demonstrates `LIST <value> AS PARAGRAPHS`.
     inputs:
       agenda:
         description: Structured agenda items supplied by the caller.
     template: |
-      Agenda summary:
-      {{ LIST INPUT agenda OF SENTENCES }}
+      Agenda as paragraphs:
+      {{ LIST INPUT agenda AS PARAGRAPHS }}
+
+  list_from_lines:
+    description: Demonstrates reading a multi-line string (`FROM LINES`).
+    template: |
+      {{ LET notes BE }}
+           Align roadmap
+           Confirm staffing
+      {{ END }}
+      Formatted bullets:
+      {{ LIST USE notes FROM LINES }}

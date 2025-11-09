@@ -1,92 +1,82 @@
 agents:
   load_profile:
-    description: Stub agent that would fetch profile information.
+    description: Provides profile details for demonstration.
     template: |
       name: Ada Lovelace
       role: Principal Engineer
       focus: Quarterly roadmap review
 
   summarize_profile:
-    description: Stub agent that summarizes profile text.
+    description: Summarises profile information.
     template: |
       Summary: Key accomplishments and upcoming milestones captured.
 
   profile.summarize_profile:
-    description: Example of calling an agent from a named library.
+    description: Library-scoped example for SEND ... IN ... MESSAGE.
     template: |
-      Library summary: Consolidated achievements for the quarter.
-
-  gather_tasks:
-    description: Stub agent that prepares a list of tasks.
-    facts:
-      tasks:
-        description: Tasks to follow up on.
-    template: |
-      tasks:
-        - Align roadmap
-        - Confirm staffing
-        - Publish summary
+      Summary (library): Consolidated achievements for the quarter.
 
   notify_team:
-    description: Stub agent that would notify a team about tasks.
+    description: Pretend notifier that consumes lists of tasks.
     template: |
       Notification sent to: delivery@contoso.example
+      {{ LIST INPUT }}
 
-  render_tasks:
-    description: Formats tasks as a bullet list.
+  send_message:
+    description: Demonstrates `SEND <label> MESSAGE <value>`.
     template: |
-      - Align roadmap
-      - Confirm staffing
-      - Publish summary
+      {{ SEND summarize_profile MESSAGE INPUT }}
 
-  profile_focus:
-    description: Provides a default focus item for demonstration.
+  send_message_library:
+    description: Demonstrates `SEND <label> IN <label> MESSAGE <value>`.
     template: |
-      Prepare quarterly roadmap summary
+      {{ SEND summarize_profile IN profile MESSAGE INPUT }}
 
-  call_simple:
-    description: Demonstrates `CALL <label>`.
+  send_message_block:
+    description: Demonstrates `SEND <label> MESSAGE ... END`.
     template: |
-      {{ CALL load_profile }}
-
-  call_with_from:
-    description: Demonstrates `CALL <label> FROM <label>`.
-    template: |
-      {{ USING profile FROM CALL load_profile }}
-      {{ CALL summarize_profile FROM profile }}
-
-  call_with_value:
-    description: Demonstrates `CALL <label> WITH <value>`.
-    template: |
-      {{ USING focus FROM CALL profile_focus }}
-      {{ CALL summarize_profile WITH THE focus }}
-
-  call_with_block:
-    description: Demonstrates `CALL <label> WITH ... END`.
-    template: |
-      {{ CALL summarize_profile WITH }}
-           This is a quick summary block generated inline.
+      {{ SEND summarize_profile MESSAGE }}
+           This is a summary generated inline.
            It can span multiple lines.
       {{ END }}
 
-  call_on_list:
-    description: Demonstrates `CALL <label> ON LIST <value>`.
+  send_list_value:
+    description: Demonstrates `SEND <label> LIST <value>`.
     template: |
-      {{ CALL gather_tasks }}
-      {{ CALL notify_team ON LIST FACT tasks FROM gather_tasks }}
+      {{ LET tasks BE }}
+           - Align roadmap
+           - Confirm staffing
+           - Publish summary
+      {{ END }}
+      {{ SEND notify_team LIST USE tasks }}
 
-  call_on_list_block:
-    description: Demonstrates `CALL <label> ON LIST ... END`.
+  send_list_block:
+    description: Demonstrates `SEND <label> LIST ... END`.
     template: |
-      {{ CALL notify_team ON LIST }}
+      {{ SEND notify_team LIST }}
            - Align roadmap
            - Confirm staffing
            - Publish summary
       {{ END }}
 
-  call_on_list_nested:
-    description: Demonstrates `CALL <label> ON LIST ... END` with an inner call producing the list.
+  send_list_nested:
+    description: Nested list form where the block calls another agent.
     template: |
-      {{ CALL notify_team ON LIST }}
-           {{ CALL render_tasks }}
+      {{ SEND notify_team LIST }}
+           {{ SEND summarize_profile MESSAGE }}Roadmap review due.{{ END }}
       {{ END }}
+
+  let_binding:
+    description: Demonstrates `LET <label> BE <value>` and `USE <label>`.
+    template: |
+      {{ LET summary BE SEND summarize_profile MESSAGE INPUT }}
+      Summary: {{ USE summary }}
+
+  let_block_binding:
+    description: Demonstrates `LET <label> BE ... END`.
+    template: |
+      {{ LET intro BE }}
+           Dear team,
+           Thank you for the timely updates today.
+      {{ END }}
+      {{ USE intro }}

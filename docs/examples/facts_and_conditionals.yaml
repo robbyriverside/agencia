@@ -26,28 +26,44 @@ agents:
       follow_up_needed: FALSE
 
   fact_lookup:
-    description: Demonstrates `FACT <label> FROM <label>` and bare `FACT <label>`.
+    description: Demonstrates `FACT <label> IN <label>` and bare `FACT <label>`.
     template: |
-      Profile owner: {{ FACT owner FROM ticket }}
-      Last contact noted: {{ FACT last_contact FROM ticket }}
+      Profile owner: {{ FACT owner IN ticket }}
+      Last contact noted: {{ FACT last_contact IN ticket }}
 
   condition_inline:
-    description: Demonstrates inline conditional `IF <predicate> THEN <value> ELSE <value> END`.
+    description: Demonstrates inline conditional `IF <predicate> THEN <value> ELSE <value>`.
     template: |
-      {{ IF status FROM ticket IS Resolved THEN resolution_summary FROM ticket ELSE escalation_note FROM ticket END }}
+      {{ IF status IN ticket IS Resolved THEN FACT resolution_summary IN ticket ELSE FACT escalation_note IN ticket }}
 
   condition_block:
     description: Demonstrates block conditional `IF <predicate> THEN ... END` with an `ELSE ... END`.
     template: |
-      {{ IF priority FROM ticket IS High THEN }}
+      {{ IF priority IN ticket IS High THEN }}
       Please escalate this ticket immediately.
       {{ ELSE }}
       Continue monitoring the ticket and report any changes.
       {{ END }}
 
+  condition_block_else_if:
+    description: Demonstrates block conditional with an `ELSE IF` branch inside the block.
+    template: |
+      {{ IF status IN ticket IS Closed THEN }}
+      Close the incident and notify the team.
+      {{ ELSE IF priority IN ticket IS High THEN }}
+      Escalate to the on-call engineer and track updates.
+      {{ ELSE }}
+      Continue monitoring the ticket and provide status updates.
+      {{ END }}
+
   condition_then_only:
     description: Demonstrates block conditional with no `ELSE`.
     template: |
-      {{ IF follow_up_needed FROM ticket IS TRUE THEN }}
+      {{ IF follow_up_needed IN ticket IS TRUE THEN }}
       Schedule a follow-up call with the customer.
       {{ END }}
+
+  condition_inline_else_if:
+    description: Demonstrates inline conditional with `ELSE IF` expressions.
+    template: |
+      Ticket summary: {{ IF status IN ticket IS Resolved THEN FACT resolution_summary IN ticket ELSE IF priority IN ticket IS High THEN FACT escalation_note IN ticket ELSE FACT last_contact IN ticket }}

@@ -1,0 +1,165 @@
+# Parley keyword inventory (post-SEND revision)
+
+guiding_principles:
+  - "Favor plain English without sacrificing precision."
+  - "Use consistent prepositions for similar roles (e.g., all sources share the same word)."
+  - "Keep the vocabulary small so non-programmers can learn it quickly."
+  - "Choose terms that map cleanly to Go, Dart, and Python runtimes."
+
+keywords:
+  - name: INPUT
+    current_forms:
+      - "INPUT"
+      - "INPUT <label>"
+    alternatives:
+      - MESSAGE
+      - TEXT
+      - FIELD
+    notes: >
+      INPUT signals data supplied to the agent. Alternatives like MESSAGE or FIELD read smoothly,
+      but could blur the line between structured inputs and arbitrary text.
+
+  - name: SEND
+    current_forms:
+      - "SEND <label> MESSAGE <value>"
+      - "SEND <label> MESSAGE ... END"
+      - "SEND <label> IN <label> MESSAGE <value>"
+      - "SEND <label> LIST <value>"
+      - "SEND <label> LIST ... END"
+      - "SEND <label> IN <label> LIST <value>"
+    alternatives:
+      - DELIVER
+      - DISPATCH
+      - ASK
+    notes: >
+      SEND emphasises delivering information to another agent. DELIVER/DISPATCH sound natural, while
+      ASK feels conversational. Any change should still read well with LIST and MESSAGE modifiers.
+
+  - name: IN
+    current_forms:
+      - "SEND <label> IN <label> ..."
+      - "FACT <label> IN <label>"
+    alternatives:
+      - FROM
+      - WITHIN
+      - VIA
+    notes: >
+      IN highlights the source collection or library. FROM is familiar and still accepted for
+      backward compatibility, but IN encourages a more conversational tone ("tasks in planner").
+
+  - name: MESSAGE
+    current_forms:
+      - "SEND <label> MESSAGE <value>"
+      - "SEND <label> MESSAGE ... END"
+    alternatives:
+      - NOTE
+      - TEXT
+      - REQUEST
+    notes: >
+      MESSAGE distinguishes single-string payloads from list payloads. NOTE or REQUEST can read even
+      more naturally depending on the domain.
+
+  - name: LIST
+    current_forms:
+      - "LIST <value>"
+      - "LIST <value> FROM BULLETS"
+      - "LIST <value> FROM LINES"
+      - "LIST <value> FROM PARAGRAPHS"
+      - "LIST <value> AS BULLETS"
+      - "LIST <value> AS LINES"
+      - "LIST <value> AS PARAGRAPHS"
+    alternatives:
+      - ITEMIZE
+      - DISPLAY
+      - SHOW
+    notes: >
+      Bullets are the native list form. FROM describes how Parley reads existing text; AS defines the
+      output style. Keeping LIST short helps the construct read like prose.
+
+  - name: FROM
+    current_forms:
+      - "LIST <value> FROM BULLETS"
+      - "LIST <value> FROM LINES"
+      - "LIST <value> FROM PARAGRAPHS"
+    alternatives:
+      - USING
+      - READ AS
+    notes: >
+      FROM expresses how to interpret incoming list text. USING is a close synonym, but FROM has the
+      strongest English flavour ("read tasks from lines").
+
+  - name: AS
+    current_forms:
+      - "LIST <value> AS BULLETS"
+      - "LIST <value> AS LINES"
+      - "LIST <value> AS PARAGRAPHS"
+    alternatives:
+      - WRITING
+      - OUTPUT
+      - FORMATTED AS
+    notes: >
+      AS is concise and pairs well with FROM. Longer phrases are clearer but slow the reader down.
+
+  - name: FACT
+    current_forms:
+      - "FACT <label> IN <label>"
+      - "FACT <label>"
+    alternatives:
+      - KNOW
+      - DATA
+      - REMEMBER
+    notes: >
+      FACT calls out durable, structured information stored in the chat. KNOW is softer and more
+      conversational; DATA emphasises the structured nature of the value.
+
+  - name: IF_THEN_ELSE_END
+    current_forms:
+      - "IF <predicate> THEN <value> ELSE <value>"
+      - "IF <predicate> THEN ... END"
+      - "ELSE IF <predicate> THEN ... END"
+      - "ELSE ... END"
+    alternatives:
+      - WHEN / OTHERWISE / END
+      - IF / THEN / ELSE / FI
+    notes: >
+      The current set mirrors common programming languages. WHEN / OTHERWISE would feel more like
+      prose. Whichever paradigm we pick, use a single terminator (END) for clarity.
+
+  - name: LET
+    current_forms:
+      - "LET <label> BE <value>"
+      - "LET <label> BE ... END"
+    alternatives:
+      - STORE
+      - CAPTURE
+      - REMEMBER
+    notes: >
+      LET introduces a binding that can be retrieved later. STORE emphasises persistence; CAPTURE
+      hints at one-time evaluation.
+
+  - name: BE
+    current_forms:
+      - "LET <label> BE <value>"
+      - "LET <label> BE ... END"
+    alternatives:
+      - EQUALS
+      - IS
+    notes: >
+      BE keeps the sentence flowing naturally: "LET summary BE ...". IS or EQUALS could replace it,
+      but BE keeps the clause soft and readable.
+
+  - name: USE
+    current_forms:
+      - "USE <label>"
+    alternatives:
+      - VALUE
+      - RESULT
+      - BINDING
+    notes: >
+      USE retrieves a binding created by LET. VALUE or RESULT read plainly; keeping USE aligns with
+      "use the stored summary" phrasing.
+
+next_steps:
+  - "Confirm whether SEND should support synonyms such as DELIVER or DISPATCH."
+  - "Validate new list defaults (bullets) with non-programmer authors."
+  - "Collect feedback on BE/USE to determine if softer alternatives (IS, VALUE) improve readability."

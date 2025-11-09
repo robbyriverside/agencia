@@ -11,34 +11,32 @@ This document will give you more details for each form:
 INPUT             // exactly what the user entered
 INPUT <label>     // a specific destructured input
 
-// all calls start with an agent which could include a FROM keyword to indicate library.
-// the input to any agent is a string, which can be passed as a statement or a block.
-CALL <label>
-CALL <label> FROM <label>  // this is the agent from a library
-CALL <label> WITH <value>  // 
-CALL <label> WITH ... END
-// the ON keyword expects a list and the agent is called on each value in order.
-// keep in mind each agent call can be concurrent.  but the order must be preserved like a map
-CALL <label> ON LIST <value>
-CALL <label> ON LIST ... END
+// SEND delivers a message or a list to another agent. Optional IN points to a library.
+SEND <label> MESSAGE <value>
+SEND <label> MESSAGE ... END
+SEND <label> IN <label> MESSAGE <value>
+SEND <label> LIST <value>
+SEND <label> LIST ... END
+SEND <label> IN <label> LIST <value>
 
-// to avoid using FACT keyword everywhere, a bare label can only be a FACT
-// but the author may also wich to be explicit
-FACT <label> FROM <label>
+FACT <label> IN <label>
 FACT <label>
 
-IF <predicate> THEN <value> ELSE <value> END
+IF <predicate> THEN <value> ELSE <value>   // statement form does not need END
 IF <predicate> THEN ... END
+ELSE IF <predicate> THEN ... END
 ELSE ... END
 
-// If the value is a string it will extract a list from the string however 
-// The OF keyword offers some output formatting for the list.
+// LIST reads and writes bullet lists by default. FROM adjusts the reader format; AS controls output.
 LIST <value>
-LIST <value> OF BULLETS  // display the list as a string containing bullets for list items
-LIST <value> OF SENTENCES  // displays the list as sentences, so it becomes a document
+LIST <value> FROM BULLETS
+LIST <value> FROM LINES
+LIST <value> FROM PARAGRAPHS
+LIST <value> AS BULLETS
+LIST <value> AS LINES
+LIST <value> AS PARAGRAPHS
 
-USING <label> FROM <value>  // this binds the label to the value which can be 
-USING <label> FROM ... END  // binds label to the contents of the block
+LET <label> BE <value>
+LET <label> BE ... END
 
-THE <label>  // gets the value of a label
-USE <label>  // gets the value of a label
+USE <label>

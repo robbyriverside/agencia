@@ -28,7 +28,9 @@ func newStubContext() *stubContext {
 			"ticket.escalation_note":    "Escalate to networking team",
 			"ticket.priority":           "High",
 			"ticket.follow_up_needed":   "TRUE",
-			"tasks":                     []any{"Align roadmap", "Confirm staffing"},
+			"tasks":                     []any{"Align roadmap", "Confirm staffing", "Publish summary"},
+			"lines":                     "Align roadmap\nConfirm staffing",
+			"paragraphs":                "Align roadmap status\n\nConfirm staffing actions",
 		},
 		bindings: make(map[string]any),
 	}
@@ -50,28 +52,30 @@ func (c *stubContext) CallWith(agent string, value any) string {
 }
 
 func (c *stubContext) CallOnList(agent string, values any) string {
-	items := c.toStringSlice(values)
-	return "call_on_list:" + agent + ":[" + strings.Join(items, ",") + "]"
+	items := c.listWithStyle(values, "bullets")
+	if len(items) == 0 {
+		return "call_on_list:" + agent + ":"
+	}
+	return "call_on_list:" + agent + ":\n- " + strings.Join(items, "\n- ")
 }
 
 func (c *stubContext) List(value any, style string) string {
-	items := c.toStringSlice(value)
-	switch style {
-	case "bullets":
-		for i, item := range items {
-			items[i] = "- " + item
-		}
+	return c.ListFormat(value, style, style)
+}
+
+func (c *stubContext) ListFormat(value any, readStyle, writeStyle string) string {
+	items := c.listWithStyle(value, readStyle)
+	switch writeStyle {
+	case "lines":
 		return strings.Join(items, "\n")
-	case "sentences":
-		for i, item := range items {
-			if !strings.HasSuffix(item, ".") {
-				item += "."
-			}
-			items[i] = item
-		}
-		return strings.Join(items, " ")
+	case "paragraphs":
+		return strings.Join(items, "\n\n")
 	default:
-		return "[" + strings.Join(items, " ") + "]"
+		bullets := make([]string, len(items))
+		for i, item := range items {
+			bullets[i] = "- " + item
+		}
+		return strings.Join(bullets, "\n")
 	}
 }
 
@@ -109,7 +113,7 @@ func (c *stubContext) Equals(value any, expected string) bool {
 
 func (c *stubContext) Has(value any, expected string) bool {
 	expected = strings.ToLower(expected)
-	for _, item := range c.toStringSlice(value) {
+	for _, item := range c.listWithStyle(value, "bullets") {
 		if strings.Contains(strings.ToLower(item), expected) {
 			return true
 		}
@@ -143,45 +147,114 @@ func (c *stubContext) toString(value any) string {
 	}
 }
 
-func (c *stubContext) toStringSlice(value any) []string {
+func (c *stubContext) listWithStyle(value any, style string) []string {
+	style = strings.ToLower(style)
 	switch v := value.(type) {
 	case nil:
 		return nil
 	case []string:
-		out := make([]string, len(v))
-		copy(out, v)
-		for i := range out {
-			out[i] = strings.TrimSpace(out[i])
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			out = append(out, item)
 		}
 		return out
 	case []any:
 		out := make([]string, 0, len(v))
 		for _, item := range v {
-			out = append(out, c.toString(item))
+			text := strings.TrimSpace(c.toString(item))
+			if text == "" {
+				continue
+			}
+			out = append(out, text)
 		}
 		return out
 	case string:
-		lines := strings.Split(v, "\n")
+		return parseStubListString(v, style)
+	default:
+		text := strings.TrimSpace(c.toString(v))
+		if text == "" {
+			return nil
+		}
+		return []string{text}
+	}
+}
+
+func parseStubListString(input, style string) []string {
+	input = strings.ReplaceAll(input, "\r\n", "\n")
+	switch style {
+	case "lines":
+		lines := strings.Split(input, "\n")
 		out := make([]string, 0, len(lines))
 		for _, line := range lines {
 			trimmed := strings.TrimSpace(line)
 			if trimmed == "" {
 				continue
 			}
-			trimmed = strings.TrimPrefix(trimmed, "- ")
-			trimmed = strings.TrimPrefix(trimmed, "-")
-			trimmed = strings.TrimPrefix(trimmed, "* ")
-			trimmed = strings.TrimPrefix(trimmed, "*")
-			trimmed = strings.TrimSpace(trimmed)
+			out = append(out, trimmed)
+		}
+		return out
+	case "paragraphs":
+		return splitStubParagraphs(input)
+	default:
+		lines := strings.Split(input, "\n")
+		out := make([]string, 0, len(lines))
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			if !strings.HasPrefix(trimmed, "-") {
+				continue
+			}
+			trimmed = strings.TrimSpace(trimmed[1:])
 			if trimmed == "" {
 				continue
 			}
 			out = append(out, trimmed)
 		}
 		return out
-	default:
-		return []string{c.toString(v)}
 	}
+}
+
+func splitStubParagraphs(input string) []string {
+	lines := strings.Split(input, "\n")
+	var paragraphs []string
+	var current []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if len(current) > 0 {
+				paragraphs = append(paragraphs, strings.Join(current, " "))
+				current = nil
+			}
+			continue
+		}
+		current = append(current, trimmed)
+	}
+	if len(current) > 0 {
+		paragraphs = append(paragraphs, strings.Join(current, " "))
+	}
+	return paragraphs
+}
+
+func (c *stubContext) Eval(block string) string {
+	translated, err := Translate(block)
+	if err != nil {
+		return fmt.Sprintf("[parley error: %v]", err)
+	}
+	tmpl, err := template.New("inline").Parse(translated)
+	if err != nil {
+		return fmt.Sprintf("[parley parse error: %v]", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, c); err != nil {
+		return fmt.Sprintf("[parley exec error: %v]", err)
+	}
+	return strings.TrimSpace(buf.String())
 }
 
 func TestTranslateAndExecute(t *testing.T) {
@@ -202,44 +275,36 @@ func TestTranslateAndExecute(t *testing.T) {
 			expected: "Topic: Roadmap",
 		},
 		{
-			name:     "CallSimple",
-			parley:   "{{ CALL greet }}",
-			expected: "call:greet",
+			name:     "SendMessage",
+			parley:   "{{ SEND greet MESSAGE INPUT }}",
+			expected: "call_with:greet:Hello world",
 		},
 		{
-			name:     "CallFrom",
-			parley:   "{{ CALL summarize FROM profile }}",
-			expected: "call:profile.summarize",
+			name:     "SendMessageBlock",
+			parley:   `{{ SEND greet MESSAGE }}Thank you!{{ END }}`,
+			expected: "call_with:greet:Thank you!",
 		},
 		{
-			name:     "CallWithValue",
-			parley:   "{{ CALL summarize WITH INPUT topic }}",
-			expected: "call_with:summarize:Roadmap",
+			name:     "SendMessageLibrary",
+			parley:   "{{ SEND summarize IN profile MESSAGE INPUT }}",
+			expected: "call_with:profile.summarize:Hello world",
 		},
 		{
-			name: "CallWithBlock",
-			parley: `{{ CALL summarize WITH
-Line one
-Line two
-END }}`,
-			expected: "call_with:summarize:Line one\nLine two",
+			name:     "SendListValue",
+			parley:   "{{ SEND notify LIST tasks }}",
+			expected: "call_on_list:notify:\n- Align roadmap\n- Confirm staffing\n- Publish summary",
 		},
 		{
-			name:     "CallOnListValue",
-			parley:   "{{ CALL notify ON LIST tasks }}",
-			expected: "call_on_list:notify:[Align roadmap,Confirm staffing]",
-		},
-		{
-			name: "CallOnListBlock",
-			parley: `{{ CALL notify ON LIST
+			name: "SendListBlock",
+			parley: `{{ SEND notify LIST }}
 - Align roadmap
 - Confirm staffing
-END }}`,
-			expected: "call_on_list:notify:[Align roadmap,Confirm staffing]",
+{{ END }}`,
+			expected: "call_on_list:notify:\n- Align roadmap\n- Confirm staffing",
 		},
 		{
 			name:     "FactExplicit",
-			parley:   "Owner: {{ FACT owner FROM profile }}",
+			parley:   "Owner: {{ FACT owner IN profile }}",
 			expected: "Owner: Zhou",
 		},
 		{
@@ -249,45 +314,58 @@ END }}`,
 		},
 		{
 			name:     "IfInline",
-			parley:   "{{ IF status FROM ticket IS Resolved THEN resolution_summary FROM ticket ELSE escalation_note FROM ticket END }}",
+			parley:   "{{ IF status IN ticket IS Resolved THEN FACT resolution_summary IN ticket ELSE FACT escalation_note IN ticket }}",
 			expected: "Ticket closed",
 		},
 		{
+			name:     "IfInlineElseIf",
+			parley:   "{{ IF status IN ticket IS Closed THEN FACT escalation_note IN ticket ELSE IF priority IN ticket IS High THEN FACT resolution_summary IN ticket ELSE FACT escalation_note IN ticket }}",
+			expected: "Ticket closed",
+		},
+		{
+			name:     "IfInlineElseFallback",
+			parley:   "{{ IF status IN ticket IS Closed THEN FACT resolution_summary IN ticket ELSE IF priority IN ticket IS Low THEN FACT owner IN profile ELSE FACT escalation_note IN ticket }}",
+			expected: "Escalate to networking team",
+		},
+		{
 			name:     "IfBlock",
-			parley:   `{{ IF priority FROM ticket IS High THEN }}Escalate now.{{ ELSE }}Monitor.{{ END }}`,
+			parley:   `{{ IF priority IN ticket IS High THEN }}Escalate now.{{ ELSE }}Monitor.{{ END }}`,
 			expected: "Escalate now.",
 		},
 		{
+			name:     "IfBlockElseIf",
+			parley:   `{{ IF status IN ticket IS Closed THEN }}Closed.{{ ELSE IF priority IN ticket IS High THEN }}High priority.{{ ELSE }}Fallback.{{ END }}`,
+			expected: "High priority.",
+		},
+		{
 			name:     "IfThenOnly",
-			parley:   `{{ IF follow_up_needed FROM ticket IS TRUE THEN }}Schedule follow-up.{{ END }}`,
+			parley:   `{{ IF follow_up_needed IN ticket IS TRUE THEN }}Schedule follow-up.{{ END }}`,
 			expected: "Schedule follow-up.",
 		},
 		{
 			name:     "ListDefault",
 			parley:   "{{ LIST tasks }}",
-			expected: "[Align roadmap Confirm staffing]",
+			expected: "- Align roadmap\n- Confirm staffing\n- Publish summary",
 		},
 		{
-			name:     "ListBullets",
-			parley:   "{{ LIST tasks OF BULLETS }}",
-			expected: "- Align roadmap\n- Confirm staffing",
+			name:     "ListFromLines",
+			parley:   "{{ LIST FACT lines FROM LINES AS LINES }}",
+			expected: "Align roadmap\nConfirm staffing",
 		},
 		{
-			name:     "ListSentences",
-			parley:   "{{ LIST tasks OF SENTENCES }}",
-			expected: "Align roadmap. Confirm staffing.",
+			name:     "ListAsParagraphs",
+			parley:   "{{ LIST FACT paragraphs FROM PARAGRAPHS AS PARAGRAPHS }}",
+			expected: "Align roadmap status\n\nConfirm staffing actions",
 		},
 		{
-			name:     "UsingThe",
-			parley:   `{{ USING summary FROM CALL summarize }}Summary: {{ THE summary }}`,
-			expected: "Summary: call:summarize",
+			name:     "LetMessage",
+			parley:   "{{ LET summary BE SEND summarize IN profile MESSAGE INPUT }}Summary: {{ USE summary }}",
+			expected: "Summary: call_with:profile.summarize:Hello world",
 		},
 		{
-			name: "UsingBlock",
-			parley: `{{ USING note FROM
-Thanks team!
-END }}{{ USE note }}`,
-			expected: "Thanks team!",
+			name:     "LetBlock",
+			parley:   "{{ LET note BE }}Thanks team!{{ END }}Note: {{ USE note }}",
+			expected: "Note: Thanks team!",
 		},
 	}
 

@@ -9,6 +9,7 @@
               | <fact-stmt>
               | <if-inline-stmt>
               | <if-start-stmt>
+              | <else-if-stmt>
               | <else-stmt>
               | <endif-stmt>
               | <list-stmt>
@@ -25,9 +26,13 @@
 
 <fact-stmt> ::= "FACT" <path> "FROM" <path>
 
-<if-inline-stmt> ::= "IF" <predicate> "THEN" <branch-expression> "ELSE" <branch-expression> "END"
+<if-inline-stmt> ::= "IF" <predicate> "THEN" <branch-expression>
+                     { "ELSE" "IF" <predicate> "THEN" <branch-expression> }
+                     "ELSE" <branch-expression> [ "END" ]
 
 <if-start-stmt> ::= "IF" <predicate> "THEN" [ <branch-expression> ]
+
+<else-if-stmt> ::= "ELSE" "IF" <predicate> "THEN" [ <branch-expression> ]
 
 <else-stmt> ::= "ELSE" [ <branch-expression> ]
 

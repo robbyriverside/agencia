@@ -1,0 +1,34 @@
+agents:
+
+  notify_team:
+    description: Stub agent that would notify a team about tasks.
+    template: |
+      Notification sent to: delivery@contoso.example
+      {{ LIST INPUT }}
+
+  render_tasks:
+    description: Formats tasks as a bullet list.
+    template: |
+      - Align roadmap
+      - Confirm staffing
+      - Publish summary
+
+  send_list_direct:
+    description: Demonstrates `SEND <label> LIST ... END`.
+    template: |
+      {{ SEND notify_team LIST }}
+           - Align roadmap
+           - Confirm staffing
+           - Publish summary
+      {{ END }}
+
+  send_list_let:
+    description: Demonstrates binding a generated list before sending.
+    template: |
+      {{ LET tasks BE SEND render_tasks MESSAGE INPUT }}
+      {{ SEND notify_team LIST USE tasks }}
+
+  send_list_nested:
+    description: Demonstrates binding a generated list before sending.
+    template: |
+      {{ SEND notify_team LIST SEND render_tasks MESSAGE INPUT }}
