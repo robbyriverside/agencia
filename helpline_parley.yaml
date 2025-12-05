@@ -1,0 +1,94 @@
+agents:
+
+# nursing appointments - nursing expert
+  nursing:
+    description: "Scheduler for In-home nursing services for seniors"
+    inputs:
+      date:
+        description: "Date for the appointment"
+      time:
+        description: "Time for the appointment"
+      nurse:
+        description: "Nurse's name"
+      address:
+        description: "Home address of the user"
+    template: |
+      I have scheduled your appointment with {{ INPUT nurse }} on {{ INPUT date }} at {{ INPUT time }}. 
+      The appointment will be held at {{ INPUT address }}.
+      If the date and time are not provided, then you can check for next available time slots.
+      If the nurse's name is not provided, then you can check for available nurses in your area.
+    
+# doctors appointments - medical expert
+  appointments:
+    description: "Schedule a doctor's appointment"
+    inputs:
+      date:
+        description: "Date for the appointment"
+      time:
+        description: "Time for the appointment"
+      doctor:
+        description: "Doctor's name"
+      location:
+        description: "Location of the appointment"
+    template: |
+      I have scheduled your appointment with {{ INPUT doctor }} on {{ INPUT date }} at {{ INPUT time }}. 
+      The appointment will be held at {{ INPUT location }}. 
+
+# cognitive check-in - cognitive expert
+  cognitive:
+    description: "Ask the user about their cognitive health"
+    role: cognitive_evaluator
+    inputs:
+      name:
+        description: "Name of the user"
+        required: false
+    prompt: |
+      Evaluate this user input.  Ask a series of questions to assess the user's cognitive health.
+      If the user seems confused, ask them to schedule a cognitive check-in.
+      If the user is not confused, then ask them about their cognitive health and how they are
+      feeling.
+
+      This is what the user has told us so far:
+      {{ IF information FROM mainmenu IS NOT EMPTY THEN }}
+      {{ LIST information FROM mainmenu AS BULLETS }}
+      {{ END }}
+
+      Use the following information to guide your questions:
+      {{ INPUT }}
+
+  mainmenu:
+    facts:
+      information:
+        description: |
+          Collection of partial information shared by the user over time.
+          Collect details naturally and gently, even if you don't have all the information yet.
+          Add each new iten into the list, but keep the older information intact.
+          This will help you remember the user's preferences and needs.
+        type: list
+        add: true
+    prompt: |
+      You are a personal assistant for seniors. 
+      Seniors call you to get help with the following tasks.:
+      1. Schedule a doctor's appointment
+      2. Schedule in-home nursing care
+      3. Cognative check-in
+
+      If the caller begins talking about something, 
+      don’t redirect — follow along and gently guide 
+      the conversation to gather details as needed.
+      {{ IF information IS NOT EMPTY THEN }}
+      Here’s what the user has already told us so far. Use this information to avoid repeating questions or asking irrelevant ones:
+      {{ LIST information AS BULLETS }}
+      This context includes known names, times, places, and services they've mentioned. Use it to figure
+      out what kind of help they need.   
+      {{ END }}
+      Pay attention to what kind of appointment the user is asking about.
+      If they seem confused and you can't figure out what they want,
+      schedule a cognitive check-in.
+
+      User request:
+      {{ INPUT  }}
+    listeners:
+      - appointments
+      - nursing
+      - cognitive

@@ -1,46 +1,90 @@
-# Parley Form Legend
+# Parley Forms
 
-These notes mirror the shorthand used in `docs/parley_forms.txt` so we can iterate on the surface
-syntax without diving back into full grammar work.  Every placeholder in angle brackets represents a
-class of words or phrases that can appear in the directive.
+Refreshed forms to align with label-driven updates.
+Use `...` to denote a block body captured between the opening directive and `END`.
 
-## Placeholders
+## Inputs
 
-- `<label>`  
-  A human-readable name: one or more words joined by spaces or hyphens. Labels identify agents,
-  facts, list declarations, or user-provided bindings. Examples: `planner`, `planner tasks`,
-  `summary`.
+Retrieve input from the user.
 
-- `<value>`  
-  Any evaluable source: an `INPUT`, a `CALL`, a `FACT`, a `LIST`, a literal block (`... END`), or a
-  label captured via `USING`. Values feed into other directives (for example `CALL <label> WITH <value>` or `USING
-  <label> FROM <value>`).
+- `INPUT`
+- `INPUT <label>`
 
-- `<predicate>`  
-  A comparison expressed in Parley English. Predicates usually read like `language FROM concierge IS
-  French` or `tasks FROM planner HAS items`. They may reference `INPUT`, `FACT`, `CALL`, or labels
-  combined with comparison terms such as `IS`, `IS NOT`, `HAS`, or `IS EMPTY`.
+## Sending Messages
 
-## Related forms
+Send messages to agents.
 
-- `USING <label> FROM ... END` produces a label that can be retrieved via `THE <label>` or `USE
-  <label>`, giving another way to create reusable values inside the template itself.
-- `CALL <label> ON LIST ... END` consumes a `<value>` or block and may produce derived facts,
-  depending on how the agent is defined.
+### Simple Send
+- `SEND <label>`  
+  *Shorthand for `SEND <label> MESSAGE INPUT`*
 
-```parley
-{{ USING summary FROM CALL summarize }}
-Summary:
-{{ THE summary }}
-```
+### Single Message
+- `SEND <label> MESSAGE <value>`  
+  *Send a single message to an agent*
+- `SEND <label> MESSAGE ... END`  
+  *Send message in block*
 
-`USING` evaluates the directive immediately and stores the result in a label (`summary`) that belongs
-to the current template scope.  Unlike `REFS`, no external handle is required—the template itself
-creates, names, and retrieves the value.
+### Multiple Messages
+- `SEND <label> LIST <value>`  
+  *Send multiple messages to an agent*
+- `SEND <label> LIST ... END`  
+  *Send multiple messages in the list block*
 
-`USING` covers all internal binding needs. Any data returned by agents should be stored into facts,
-which keeps the language surface small and leverages Agencia’s existing persistence model.
+### Sending to Library Agents
+- `SEND <label> IN <label>`  
+  *Shorthand for `SEND <label> IN <label> MESSAGE INPUT`*
+- `SEND <label> IN <label> MESSAGE <value>`  
+  *Send a single message to an agent in a library*
+- `SEND <label> IN <label> MESSAGE ... END`  
+  *Send message in block*
+- `SEND <label> IN <label> LIST <value>`  
+  *Send multiple messages to an agent in a library*
+- `SEND <label> IN <label> LIST ... END`  
+  *Send multiple messages in the list block*
 
-Keep this legend close while adjusting the forms: if a new placeholder appears in
-`docs/parley_forms.txt`, add the matching description here so designers and implementers stay in
-sync.
+## Facts
+
+Retrieve facts from the context.
+
+- `FACT <label> IN <label>`
+- `FACT <label>`
+
+## Conditionals
+
+Conditional logic within templates.
+
+- `IF <predicate> THEN <value> ELSE <value>`  
+  *Statement does not need `END`, like a block*
+- `IF <predicate> THEN ... END`
+- `ELSE IF <predicate> THEN ... END`
+- `ELSE ... END`
+
+## Lists
+
+Handling list formatting and parsing.
+
+### Input Formats
+- `LIST <value>`  
+  *Read bullets, write bullets*
+- `LIST <value> FROM BULLETS`  
+  *Explicit synonym for the default*
+- `LIST <value> FROM LINES`  
+  *Read lines (single newline), write bullets*
+- `LIST <value> FROM PARAGRAPHS`  
+  *Read paragraphs (blank line separated), write bullets*
+
+### Output Formats
+- `LIST <value> AS BULLETS`  
+  *Write bullets (default)*
+- `LIST <value> AS LINES`  
+  *Read bullets, write single-line entries*
+- `LIST <value> AS PARAGRAPHS`  
+  *Read bullets, write paragraphs*
+
+## Bindings
+
+Variable assignment and usage.
+
+- `LET <label> BE <value>`
+- `LET <label> BE ... END`
+- `USE <label>`
