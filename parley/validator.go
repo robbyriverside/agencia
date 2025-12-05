@@ -20,19 +20,22 @@ type AgentInfo struct {
 
 // Validator checks a Parley template string for syntax errors and invalid references.
 type Validator struct {
-	ctx    ValidationContext
-	errors []string
+	ctx        ValidationContext
+	errors     []string
+	blockStack []string
 }
 
 func NewValidator(ctx ValidationContext) *Validator {
 	return &Validator{
-		ctx:    ctx,
-		errors: []string{},
+		ctx:        ctx,
+		errors:     []string{},
+		blockStack: []string{},
 	}
 }
 
 func (v *Validator) Validate(source string) []string {
 	v.errors = []string{}
+	v.blockStack = []string{} // Reset stack for new validation
 
 	// Reuse directive pattern from translator
 	// directivePattern = regexp.MustCompile(`(?s){{(.*?)}}`)
@@ -55,6 +58,12 @@ func (v *Validator) Validate(source string) []string {
 			v.errors = append(v.errors, fmt.Sprintf("Line %d: %v", line, err))
 		}
 	}
+
+	// Check for unclosed blocks
+	if len(v.blockStack) > 0 {
+		v.errors = append(v.errors, fmt.Sprintf("Unclosed blocks at end of template: %v", v.blockStack))
+	}
+
 	return v.errors
 }
 
@@ -66,19 +75,39 @@ func (v *Validator) validateDirective(content string) error {
 
 	// Handle Block Starts
 	if strings.HasPrefix(upper, "SEND ") {
+		// Check for block form
+		// SEND ... MESSAGE (implied newline/block follows)
+		// OR SEND ... LIST
+		if strings.HasSuffix(upper, " MESSAGE") || strings.HasSuffix(upper, " LIST") {
+			v.blockStack = append(v.blockStack, "SEND")
+		}
 		// Check syntax using translator's logic or custom
 		return v.validateSend(content)
 	}
 	if strings.HasPrefix(upper, "LET ") {
+		if strings.HasSuffix(upper, " BE") {
+			v.blockStack = append(v.blockStack, "LET")
+		}
 		return v.validateLet(content)
 	}
 
 	switch {
 	case upper == "END":
+		if len(v.blockStack) == 0 {
+			return fmt.Errorf("unexpected END command")
+		}
+		// Pop stack
+		v.blockStack = v.blockStack[:len(v.blockStack)-1]
 		return nil
 	case upper == "ELSE":
+		if len(v.blockStack) == 0 || v.blockStack[len(v.blockStack)-1] != "IF" {
+			return fmt.Errorf("unexpected ELSE command (not inside IF block)")
+		}
 		return nil
 	case strings.HasPrefix(upper, "ELSE IF "):
+		if len(v.blockStack) == 0 || v.blockStack[len(v.blockStack)-1] != "IF" {
+			return fmt.Errorf("unexpected ELSE IF command (not inside IF block)")
+		}
 		return v.validateElseIf(content)
 	case strings.HasPrefix(upper, "ELSE "):
 		// Inline ELSE ...
@@ -92,6 +121,12 @@ func (v *Validator) validateDirective(content string) error {
 	case strings.HasPrefix(upper, "FACT"):
 		return v.validateFact(content)
 	case strings.HasPrefix(upper, "IF"):
+		// IF ... THEN -> Block
+		// IF ... THEN ... ELSE ... -> Statement
+		// Simplest check: does it end with THEN?
+		if strings.HasSuffix(upper, " THEN") {
+			v.blockStack = append(v.blockStack, "IF")
+		}
 		return v.validateIf(content)
 	case strings.HasPrefix(upper, "LIST"):
 		return v.validateList(content)

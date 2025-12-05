@@ -9,19 +9,29 @@ Instead of writing complex code, you write "Agents" in a simple checklist format
 Think of an Agent as a specific worker with a job description. You give the Agent:
 1.  **A Name**: What do we call this worker? (e.g., `greet`, `scheduler`)
 2.  **A Description**: What does this worker do? This helps the AI figure out when to use this agent.
-3.  **A Template**: What does the agent say or do? This is where you write your instructions.
+3.  **A Job**: What logic does this agent follow? You choose one of two keywords:
+    *   `template`: Returns the text exactly as you wrote it (after filling in blanks). Use this for fixed responses or logic.
+    *   `prompt`: Sends your text to an AI. The AI reads it as instructions and generates a smart response.
 
 Here is a simple example:
 
 ```yaml
 agents:
+  # Template: Deterministic output for simple tasks
   greet:
     description: "Greet the user"
     template: |
       Hello! I am an AI assistant. How can I help you today?
+
+  # Prompt: AI-driven output for complex tasks
+  storyteller:
+    description: "Tell a story"
+    prompt: |
+      Write a very short story about {{ INPUT }}.
 ```
 
-When this agent runs, it simply says: "Hello! I am an AI assistant. How can I help you today?"
+When `greet` runs, it always says the exact same thing.
+When `storyteller` runs, the AI reads your prompt and invents a new story based on the input.
 
 ## 2. Using Parley
 
@@ -160,6 +170,17 @@ You can also ask for other formats, like sentences:
 ```
 **Output:** `Milk. Eggs. Bread.`
 
+Lists can be declared statically with a block structure.
+
+```yaml
+    template: |
+      {{ SEND agent LIST}}
+        - Milk
+        - Eggs
+        - Bread
+      {{END}}
+```
+
 ## 6. Putting it All Together
 
 Here is a more complete example of an agent that takes a coffee order.
@@ -181,6 +202,7 @@ agents:
          {{ IF INPUT size IS NOT EMPTY THEN }}
             Making it a {{ INPUT size }}.
          {{ END }}
+      {{ END }}
 ```
 
 ### How it Works Explained
