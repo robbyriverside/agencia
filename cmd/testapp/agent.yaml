@@ -1,0 +1,10 @@
+agents:
+  coder:
+    description: A helpful coding assistant
+    inputs:
+      request:
+        description: The coding request
+    prompt: |
+      You are a helpful coding assistant.
+      Please handle the following request:
+      {{ INPUT request }}
