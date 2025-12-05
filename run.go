@@ -21,6 +21,9 @@ type RunContext struct {
 	Depth           int            // current depth of nested CallAgent invocations
 	LocalFacts      map[string]any // All facts stored locally during this run
 	openAICallCount int
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
 }
 
 func NewRun(reg *Registry, chat *Chat) *RunContext {

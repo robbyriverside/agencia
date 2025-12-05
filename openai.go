@@ -396,6 +396,14 @@ func (r *RunContext) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt
 	if err != nil {
 		return "", err
 	}
+	r.PromptTokens += resp.Usage.PromptTokens
+	r.CompletionTokens += resp.Usage.CompletionTokens
+	r.TotalTokens += resp.Usage.TotalTokens
+	if r.Card != nil {
+		r.Card.PromptTokens += resp.Usage.PromptTokens
+		r.Card.CompletionTokens += resp.Usage.CompletionTokens
+		r.Card.TotalTokens += resp.Usage.TotalTokens
+	}
 
 	if len(resp.Choices) == 0 {
 		return "", errors.New("OpenAI API returned no choices")
@@ -471,6 +479,14 @@ func (r *RunContext) handleToolCalls(ctx context.Context, cfg *config.Config, ag
 	contResp, err := r.invokeChatCompletion(ctx, cfg, agent, messages, tools)
 	if err != nil {
 		return "", err
+	}
+	r.PromptTokens += contResp.Usage.PromptTokens
+	r.CompletionTokens += contResp.Usage.CompletionTokens
+	r.TotalTokens += contResp.Usage.TotalTokens
+	if r.Card != nil {
+		r.Card.PromptTokens += contResp.Usage.PromptTokens
+		r.Card.CompletionTokens += contResp.Usage.CompletionTokens
+		r.Card.TotalTokens += contResp.Usage.TotalTokens
 	}
 
 	if len(contResp.Choices) > 0 {

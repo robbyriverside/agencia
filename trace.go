@@ -17,18 +17,21 @@ type LogMessage struct {
 //
 //	may contain a cycle (e.g. recursive calls)
 type TraceCard struct {
-	AgentName   string
-	Input       string
-	Inputs      map[string]any
-	Output      string
-	Prompt      string
-	Error       error
-	Ran         bool
-	PriorCard   *TraceCard
-	BranchCards []*TraceCard
-	Logs        []*LogMessage
-	Facts       map[string]any // facts set by this agent
-	LocalFacts  map[string]any // local facts set by this agent
+	AgentName        string
+	Input            string
+	Inputs           map[string]any
+	Output           string
+	Prompt           string
+	Error            error
+	Ran              bool
+	PriorCard        *TraceCard
+	BranchCards      []*TraceCard
+	Logs             []*LogMessage
+	Facts            map[string]any // facts set by this agent
+	LocalFacts       map[string]any // local facts set by this agent
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
 }
 
 func (c *TraceCard) String() string {
@@ -66,8 +69,8 @@ func (c *TraceCard) String() string {
 		inputs = fmt.Sprintf("%q", inputs)
 	}
 
-	results := fmt.Sprintf("Agent: %s\nInput: \"%s\"\nOutput: \"%s\"\n%s%s\n%s\nInputs: %s\nFacts: %s\nLocalFacts: %s",
-		c.AgentName, c.Input, c.Output, prompt, ranstr, errstr, inputs, facts, locals)
+	results := fmt.Sprintf("Agent: %s\nInput: \"%s\"\nOutput: \"%s\"\n%s%s\n%s\nInputs: %s\nFacts: %s\nLocalFacts: %s\nTokens: %d (Prompt: %d, Completion: %d)",
+		c.AgentName, c.Input, c.Output, prompt, ranstr, errstr, inputs, facts, locals, c.TotalTokens, c.PromptTokens, c.CompletionTokens)
 
 	if len(c.Logs) == 0 {
 		results += "\nno logs"
@@ -89,8 +92,8 @@ func (c *TraceCard) ShortString() string {
 	if c.PriorCard != nil {
 		prior = c.PriorCard.AgentName
 	}
-	return fmt.Sprintf("Agent: %s\nFrom: %s\nInput: \"%s\"\nOutput: \"%s\"\n%s",
-		c.AgentName, prior, c.Input, c.Output, errstr)
+	return fmt.Sprintf("Agent: %s\nFrom: %s\nInput: \"%s\"\nOutput: \"%s\"\n%s\nTokens: %d",
+		c.AgentName, prior, c.Input, c.Output, errstr, c.TotalTokens)
 }
 
 func (r *RunContext) NewTraceCard(agent, input string) *TraceCard {
