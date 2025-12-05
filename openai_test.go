@@ -223,7 +223,9 @@ func TestCallOpenAI_InvalidToolSchema(t *testing.T) {
 		t.Skipf("skipping due to OpenAI connectivity error: %v", res.Error)
 	}
 	assert.Error(t, res.Error, "should error due to invalid schema")
-	assert.True(t, strings.Contains(strings.ToLower(res.Error.Error()), "invalid"), "error should mention invalid schema or tool setup")
+	if res.Error != nil {
+		assert.True(t, strings.Contains(strings.ToLower(res.Error.Error()), "invalid"), "error should mention invalid schema or tool setup")
+	}
 }
 
 func TestCallOpenAI_ContinuationMissingTool(t *testing.T) {

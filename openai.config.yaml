@@ -1,0 +1,4 @@
+vendor: openai
+openai:
+  enabled: true
+  model: "gpt-4o"

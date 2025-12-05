@@ -192,3 +192,14 @@ func truncateForLog(s string, limit int) string {
 	}
 	return fmt.Sprintf("%s...(%d chars truncated)", s[:limit], len(s)-limit)
 }
+
+func GetAIProvider(cfg *config.Config) (AIProvider, error) {
+	switch cfg.Vendor {
+	case config.VendorOpenAI:
+		return NewOpenAIProvider(cfg.OpenAI), nil
+	case config.VendorGemini:
+		return NewGeminiProvider(cfg.Gemini), nil
+	default:
+		return nil, fmt.Errorf("unknown vendor: %s", cfg.Vendor)
+	}
+}

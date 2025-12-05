@@ -16,6 +16,8 @@ import (
 
 const (
 	envConfigPath = "AGENCIA_CONFIG"
+	VendorOpenAI  = "openai"
+	VendorGemini  = "gemini"
 )
 
 // Duration wraps time.Duration to provide YAML decoding with "set" semantics so
@@ -86,8 +88,26 @@ type OpenAIConfig struct {
 	LogPrompts            bool     `yaml:"log_prompts"`
 }
 
+type GeminiConfig struct {
+	Enabled               bool     `yaml:"enabled"`
+	APIKey                string   `yaml:"api_key"`
+	Model                 string   `yaml:"model"`
+	Temperature           *float32 `yaml:"temperature"`
+	MaxTokens             int      `yaml:"max_tokens"`
+	RequestTimeout        Duration `yaml:"request_timeout"`
+	RateLimitPerMinute    int      `yaml:"rate_limit_per_minute"`
+	MaxConcurrentRequests int      `yaml:"max_concurrent_requests"`
+	MaxCallsPerRun        int      `yaml:"max_calls_per_run"`
+	RetryAttempts         int      `yaml:"retry_attempts"`
+	RetryInitialBackoff   Duration `yaml:"retry_initial_backoff"`
+	RetryMaxBackoff       Duration `yaml:"retry_max_backoff"`
+	LogPrompts            bool     `yaml:"log_prompts"`
+}
+
 type Config struct {
+	Vendor string       `yaml:"vendor"`
 	OpenAI OpenAIConfig `yaml:"openai"`
+	Gemini GeminiConfig `yaml:"gemini"`
 
 	sourcePath string
 }
@@ -98,6 +118,17 @@ func defaultConfig() *Config {
 		OpenAI: OpenAIConfig{
 			Enabled:               true,
 			Model:                 openai.GPT4o,
+			Temperature:           &defaultTemp,
+			RequestTimeout:        DurationFrom(60 * time.Second),
+			RetryAttempts:         2,
+			RetryInitialBackoff:   DurationFrom(2 * time.Second),
+			RetryMaxBackoff:       DurationFrom(15 * time.Second),
+			MaxConcurrentRequests: 0,
+			MaxCallsPerRun:        0,
+		},
+		Gemini: GeminiConfig{
+			Enabled:               true,
+			Model:                 "gemini-1.5-pro",
 			Temperature:           &defaultTemp,
 			RequestTimeout:        DurationFrom(60 * time.Second),
 			RetryAttempts:         2,
@@ -129,6 +160,31 @@ func (c *Config) applyDefaults() {
 	if !c.OpenAI.RetryMaxBackoff.IsSet() {
 		c.OpenAI.RetryMaxBackoff = DurationFrom(15 * time.Second)
 	}
+
+	if c.Vendor == "" {
+		c.Vendor = VendorOpenAI
+	}
+
+	// Gemini Defaults
+	if c.Gemini.Model == "" {
+		c.Gemini.Model = "gemini-1.5-pro"
+	}
+	if c.Gemini.Temperature == nil {
+		defaultTemp := float32(0.2)
+		c.Gemini.Temperature = &defaultTemp
+	}
+	if !c.Gemini.RequestTimeout.IsSet() {
+		c.Gemini.RequestTimeout = DurationFrom(60 * time.Second)
+	}
+	if c.Gemini.RetryAttempts < 0 {
+		c.Gemini.RetryAttempts = 0
+	}
+	if !c.Gemini.RetryInitialBackoff.IsSet() {
+		c.Gemini.RetryInitialBackoff = DurationFrom(2 * time.Second)
+	}
+	if !c.Gemini.RetryMaxBackoff.IsSet() {
+		c.Gemini.RetryMaxBackoff = DurationFrom(15 * time.Second)
+	}
 }
 
 func (c *Config) validate() error {
@@ -157,6 +213,36 @@ func (c *Config) validate() error {
 	if backoffMax > 0 && backoffMin > backoffMax {
 		return fmt.Errorf("openai.retry_max_backoff (%s) must be greater than retry_initial_backoff (%s)", backoffMax, backoffMin)
 	}
+	if backoffMax > 0 && backoffMin > backoffMax {
+		return fmt.Errorf("openai.retry_max_backoff (%s) must be greater than retry_initial_backoff (%s)", backoffMax, backoffMin)
+	}
+
+	if c.Gemini.Temperature != nil {
+		if *c.Gemini.Temperature < 0 || *c.Gemini.Temperature > 2 {
+			return fmt.Errorf("gemini.temperature must be between 0 and 2, got %f", *c.Gemini.Temperature)
+		}
+	}
+	if c.Gemini.MaxTokens < 0 {
+		return errors.New("gemini.max_tokens cannot be negative")
+	}
+	if c.Gemini.RateLimitPerMinute < 0 {
+		return errors.New("gemini.rate_limit_per_minute cannot be negative")
+	}
+	if c.Gemini.MaxConcurrentRequests < 0 {
+		return errors.New("gemini.max_concurrent_requests cannot be negative")
+	}
+	if c.Gemini.MaxCallsPerRun < 0 {
+		return errors.New("gemini.max_calls_per_run cannot be negative")
+	}
+	if c.Gemini.RetryAttempts < 0 {
+		return errors.New("gemini.retry_attempts cannot be negative")
+	}
+	geminiBackoffMin := c.Gemini.RetryInitialBackoff.Duration()
+	geminiBackoffMax := c.Gemini.RetryMaxBackoff.Duration()
+	if geminiBackoffMax > 0 && geminiBackoffMin > geminiBackoffMax {
+		return fmt.Errorf("gemini.retry_max_backoff (%s) must be greater than retry_initial_backoff (%s)", geminiBackoffMax, geminiBackoffMin)
+	}
+
 	return nil
 }
 

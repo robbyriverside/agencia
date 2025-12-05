@@ -3,16 +3,13 @@ package agencia
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/robbyriverside/agencia/agents"
 	"github.com/robbyriverside/agencia/config"
-	"github.com/robbyriverside/agencia/logs"
 	"github.com/robbyriverside/agencia/parley"
 	"github.com/robbyriverside/agencia/utils"
-	"github.com/sashabaranov/go-openai"
 	"gopkg.in/yaml.v3"
 )
 
@@ -352,18 +349,17 @@ func (t *TemplateContext) Start(name string) string {
 }
 
 func (r *RunContext) CallAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
-	return r.CallOpenAI(ctx, agent, prompt)
-}
-
-func (r *RunContext) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {
 	cfg, err := config.Get()
 	if err != nil {
 		return "", err
 	}
-	if !cfg.OpenAI.Enabled {
-		return "", errors.New("OpenAI usage disabled via configuration")
+
+	provider, err := agents.GetAIProvider(cfg)
+	if err != nil {
+		return "", err
 	}
-	tools := []openai.Tool{}
+
+	tools := []agents.Tool{}
 	badListeners := []string{}
 	for _, listenerName := range agent.Listeners {
 		listenerAgent, err := r.Registry.LookupAgent(listenerName)
@@ -374,255 +370,120 @@ func (r *RunContext) CallOpenAI(ctx context.Context, agent *agents.Agent, prompt
 			badListeners = append(badListeners, listenerName)
 			continue
 		}
-		paramSchema := buildToolParameters(listenerAgent)
-		tools = append(tools, openai.Tool{
-			Type: openai.ToolTypeFunction,
-			Function: &openai.FunctionDefinition{
-				Name:        listenerName,
-				Description: listenerAgent.Description,
-				Parameters:  paramSchema,
-			},
-		})
+		tools = append(tools, agents.BuildToolDefinition(listenerAgent))
 	}
 
 	if len(badListeners) > 0 {
 		return "", fmt.Errorf("invalid listeners detected (missing description or input prompt): %s", strings.Join(badListeners, ", "))
 	}
 
-	messages := []openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleUser, Content: prompt},
+	messages := []agents.Message{
+		{Role: agents.RoleUser, Content: prompt},
 	}
-	resp, err := r.invokeChatCompletion(ctx, cfg, agent, messages, tools)
+
+	req := agents.AIRequest{
+		Prompt:   prompt,
+		Messages: messages,
+		Tools:    tools,
+	}
+
+	resp, err := provider.Call(ctx, req)
 	if err != nil {
 		return "", err
 	}
-	r.PromptTokens += resp.Usage.PromptTokens
-	r.CompletionTokens += resp.Usage.CompletionTokens
-	r.TotalTokens += resp.Usage.TotalTokens
+
+	r.PromptTokens += resp.PromptTokens
+	r.CompletionTokens += resp.OutputTokens
+	r.TotalTokens += resp.TotalTokens
 	if r.Card != nil {
-		r.Card.PromptTokens += resp.Usage.PromptTokens
-		r.Card.CompletionTokens += resp.Usage.CompletionTokens
-		r.Card.TotalTokens += resp.Usage.TotalTokens
+		r.Card.PromptTokens += resp.PromptTokens
+		r.Card.CompletionTokens += resp.OutputTokens
+		r.Card.TotalTokens += resp.TotalTokens
 	}
 
-	if len(resp.Choices) == 0 {
-		return "", errors.New("OpenAI API returned no choices")
+	if len(resp.ToolCalls) > 0 {
+		return r.handleToolCalls(ctx, provider, agent, prompt, tools, resp.ToolCalls, 1, messages)
 	}
 
-	firstChoice := resp.Choices[0]
-	if len(firstChoice.Message.ToolCalls) > 0 {
-		return r.handleToolCalls(ctx, cfg, agent, prompt, tools, firstChoice.Message.ToolCalls, 1, []string{})
-	}
-
-	return strings.TrimSpace(firstChoice.Message.Content), nil
+	return strings.TrimSpace(resp.Content), nil
 }
 
-func (r *RunContext) handleToolCalls(ctx context.Context, cfg *config.Config, agent *agents.Agent, prompt string, tools []openai.Tool, initialToolCalls []openai.ToolCall, depth int, trace []string) (string, error) {
+func (r *RunContext) handleToolCalls(ctx context.Context, provider agents.AIProvider, agent *agents.Agent, prompt string, tools []agents.Tool, initialToolCalls []agents.ToolCall, depth int, history []agents.Message) (string, error) {
 	if depth > 5 {
 		return "", fmt.Errorf(
-			"too many recursive tool call levels (depth=%d); possible infinite loop.\nTrace:\n%s",
+			"too many recursive tool call levels (depth=%d); possible infinite loop.",
 			depth,
-			strings.Join(trace, "\n"),
 		)
 	}
 
-	messages := []openai.ChatCompletionMessage{
-		{Role: openai.ChatMessageRoleUser, Content: prompt},
-		{Role: openai.ChatMessageRoleAssistant, ToolCalls: initialToolCalls},
-	}
+	// Append assistant message with tool calls to history
+	history = append(history, agents.Message{
+		Role:      agents.RoleAssistant,
+		ToolCalls: initialToolCalls,
+	})
 
-	functionResults := []openai.ChatCompletionMessage{}
 	for _, toolCall := range initialToolCalls {
-		if toolCall.Type == "function" {
-			agentName := toolCall.Function.Name
-			args := toolCall.Function.Arguments
-			traceEntry := fmt.Sprintf("Depth %d: called tool %s with args %s", depth, agentName, args)
-			trace = append(trace, traceEntry)
-			res := r.CallAgent(ctx, agentName, args)
-			if res.Error != nil {
-				return "", fmt.Errorf("error handling tool callback for %s: %w", agentName, res.Error)
-			}
-			if strings.Contains(res.Output, "{{") && strings.Contains(res.Output, "}}") {
-				tmpl, err := utils.TemplateParse(agentName, res.Output)
-				if err != nil {
-					return "", fmt.Errorf("error parsing template output from agent %s: %w", agentName, err)
-				}
-				var buf bytes.Buffer
-				err = tmpl.Execute(&buf, &TemplateContext{
-					UserInput: args,
-					Run:       r,
-					ctx:       ctx,
-				})
-				if err != nil {
-					return "", fmt.Errorf("error executing template output from agent %s: %w", agentName, err)
-				}
-				functionResults = append(functionResults, openai.ChatCompletionMessage{
-					Role:       openai.ChatMessageRoleTool,
-					ToolCallID: toolCall.ID,
-					Content:    buf.String(),
-				})
-			} else {
-				outputContent := res.Output
-				if outputContent == "" {
-					outputContent = " " // must be a non-nil string to satisfy OpenAI API
-				}
-				functionResults = append(functionResults, openai.ChatCompletionMessage{
-					Role:       openai.ChatMessageRoleTool,
-					ToolCallID: toolCall.ID,
-					Content:    outputContent,
-				})
-			}
-		}
-	}
-	messages = append(messages, functionResults...)
+		agentName := toolCall.Name
+		args := toolCall.Arguments
 
-	contResp, err := r.invokeChatCompletion(ctx, cfg, agent, messages, tools)
+		res := r.CallAgent(ctx, agentName, args)
+		if res.Error != nil {
+			return "", fmt.Errorf("error handling tool callback for %s: %w", agentName, res.Error)
+		}
+
+		content := res.Output
+		if strings.Contains(res.Output, "{{") && strings.Contains(res.Output, "}}") {
+			tmpl, err := utils.TemplateParse(agentName, res.Output)
+			if err != nil {
+				return "", fmt.Errorf("error parsing template output from agent %s: %w", agentName, err)
+			}
+			var buf bytes.Buffer
+			err = tmpl.Execute(&buf, &TemplateContext{
+				UserInput: args,
+				Run:       r,
+				ctx:       ctx,
+			})
+			if err != nil {
+				return "", fmt.Errorf("error executing template output from agent %s: %w", agentName, err)
+			}
+			content = buf.String()
+		}
+
+		if content == "" {
+			content = " " // must be a non-nil string
+		}
+
+		history = append(history, agents.Message{
+			Role:       agents.RoleTool,
+			ToolCallID: toolCall.ID,
+			ToolName:   toolCall.Name,
+			Content:    content,
+		})
+	}
+
+	req := agents.AIRequest{
+		Prompt:   prompt,
+		Messages: history,
+		Tools:    tools,
+	}
+
+	resp, err := provider.Call(ctx, req)
 	if err != nil {
 		return "", err
 	}
-	r.PromptTokens += contResp.Usage.PromptTokens
-	r.CompletionTokens += contResp.Usage.CompletionTokens
-	r.TotalTokens += contResp.Usage.TotalTokens
+
+	r.PromptTokens += resp.PromptTokens
+	r.CompletionTokens += resp.OutputTokens
+	r.TotalTokens += resp.TotalTokens
 	if r.Card != nil {
-		r.Card.PromptTokens += contResp.Usage.PromptTokens
-		r.Card.CompletionTokens += contResp.Usage.CompletionTokens
-		r.Card.TotalTokens += contResp.Usage.TotalTokens
+		r.Card.PromptTokens += resp.PromptTokens
+		r.Card.CompletionTokens += resp.OutputTokens
+		r.Card.TotalTokens += resp.TotalTokens
 	}
 
-	if len(contResp.Choices) > 0 {
-		choice := contResp.Choices[0]
-		if len(choice.Message.ToolCalls) > 0 {
-			if depth+1 > 5 {
-				return "", fmt.Errorf(
-					"too many recursive tool call levels (depth=%d); possible infinite loop.\nTrace:\n%s",
-					depth+1,
-					strings.Join(trace, "\n"),
-				)
-			}
-			// Recursive: new tool calls need handling
-			return r.handleToolCalls(ctx, cfg, agent, prompt, tools, choice.Message.ToolCalls, depth+1, trace)
-		}
-		return strings.TrimSpace(choice.Message.Content), nil
-	}
-	return "", errors.New("no choices returned from continuation OpenAI call")
-}
-
-func (r *RunContext) invokeChatCompletion(ctx context.Context, cfg *config.Config, agent *agents.Agent, messages []openai.ChatCompletionMessage, tools []openai.Tool) (openai.ChatCompletionResponse, error) {
-	if cfg.OpenAI.MaxCallsPerRun > 0 && r.openAICallCount >= cfg.OpenAI.MaxCallsPerRun {
-		return openai.ChatCompletionResponse{}, fmt.Errorf("OpenAI call limit (%d) reached for this run", cfg.OpenAI.MaxCallsPerRun)
+	if len(resp.ToolCalls) > 0 {
+		return r.handleToolCalls(ctx, provider, agent, prompt, tools, resp.ToolCalls, depth+1, history)
 	}
 
-	requestCtx := ctx
-	var cancel context.CancelFunc
-	if timeout := cfg.OpenAI.RequestTimeout.Duration(); timeout > 0 {
-		requestCtx, cancel = context.WithTimeout(ctx, timeout)
-	}
-	if cancel != nil {
-		defer cancel()
-	}
-
-	release, err := agents.AcquireOpenAISlot(requestCtx, cfg)
-	if err != nil {
-		return openai.ChatCompletionResponse{}, err
-	}
-	defer release()
-
-	client, err := agents.GetOpenAIClient()
-	if err != nil {
-		return openai.ChatCompletionResponse{}, err
-	}
-
-	req := agents.BuildChatCompletionRequest(cfg.OpenAI, messages, tools)
-
-	if cfg.OpenAI.LogPrompts {
-		logs.Infof("[openai] agent=%s request: %s", agentDisplayName(agent), formatMessagesForLog(messages))
-	}
-
-	r.openAICallCount++
-	resp, err := agents.CallChatCompletionWithRetry(requestCtx, client, req, cfg.OpenAI)
-	if err != nil {
-		return openai.ChatCompletionResponse{}, fmt.Errorf("OpenAI API error: %w", err)
-	}
-
-	if cfg.OpenAI.LogPrompts {
-		logs.Infof("[openai] agent=%s response: %s", agentDisplayName(agent), formatResponseForLog(resp))
-	}
-	return resp, nil
-}
-
-func agentDisplayName(agent *agents.Agent) string {
-	if agent == nil {
-		return "unknown"
-	}
-	if agent.Name != "" {
-		return agent.Name
-	}
-	return "anonymous"
-}
-
-func formatMessagesForLog(messages []openai.ChatCompletionMessage) string {
-	parts := make([]string, 0, len(messages))
-	for _, msg := range messages {
-		if len(msg.ToolCalls) > 0 {
-			names := make([]string, 0, len(msg.ToolCalls))
-			for _, call := range msg.ToolCalls {
-				names = append(names, call.Function.Name)
-			}
-			parts = append(parts, fmt.Sprintf("%s:tool-calls(%s)", msg.Role, strings.Join(names, ",")))
-			continue
-		}
-		parts = append(parts, fmt.Sprintf("%s:%s", msg.Role, truncateForLog(msg.Content, 160)))
-	}
-	return strings.Join(parts, " | ")
-}
-
-func formatResponseForLog(resp openai.ChatCompletionResponse) string {
-	if len(resp.Choices) == 0 {
-		return "no choices"
-	}
-	choice := resp.Choices[0]
-	if len(choice.Message.ToolCalls) > 0 {
-		names := make([]string, 0, len(choice.Message.ToolCalls))
-		for _, call := range choice.Message.ToolCalls {
-			names = append(names, call.Function.Name)
-		}
-		return fmt.Sprintf("tool_calls=%s", strings.Join(names, ","))
-	}
-	return truncateForLog(strings.TrimSpace(choice.Message.Content), 200)
-}
-
-func truncateForLog(s string, limit int) string {
-	if limit <= 0 || len(s) <= limit {
-		return s
-	}
-	return fmt.Sprintf("%s...(%d chars truncated)", s[:limit], len(s)-limit)
-}
-
-func buildToolParameters(agent *agents.Agent) map[string]interface{} {
-	paramSchema := map[string]interface{}{
-		"type":       "object",
-		"properties": map[string]interface{}{},
-		"required":   []string{},
-	}
-
-	for fieldName, arg := range agent.Inputs {
-		properties := paramSchema["properties"].(map[string]interface{})
-		argType := arg.Type
-		if argType == "" {
-			argType = "string"
-		}
-		properties[fieldName] = map[string]interface{}{
-			"type":        argType,
-			"description": arg.Description,
-		}
-		isRequired := true
-		if !arg.Required {
-			isRequired = false
-		}
-		if isRequired {
-			paramSchema["required"] = append(paramSchema["required"].([]string), fieldName)
-		}
-	}
-
-	return paramSchema
+	return strings.TrimSpace(resp.Content), nil
 }

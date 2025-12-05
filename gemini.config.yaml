@@ -1,0 +1,5 @@
+vendor: gemini
+gemini:
+  enabled: true
+  model: "gemini-1.5-flash" # or your preferred model
+  # api_key can be set here or via GEMINI_API_KEY env var
