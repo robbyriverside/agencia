@@ -27,6 +27,11 @@ agents:
     template: |
       {{ SEND summarize_profile MESSAGE INPUT }}
 
+  send_message_shorthand:
+    description: Demonstrates `SEND <label>` shorthand for `MESSAGE INPUT`.
+    template: |
+      {{ SEND summarize_profile }}
+
   send_message_library:
     description: Demonstrates `SEND <label> IN <label> MESSAGE <value>`.
     template: |

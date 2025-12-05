@@ -12,6 +12,8 @@ INPUT             // exactly what the user entered
 INPUT <label>     // a specific destructured input
 
 // SEND delivers a message or a list to another agent. Optional IN points to a library.
+SEND <label>            // shorthand for SEND <label> MESSAGE INPUT
+SEND <label> IN <label> // shorthand for SEND <label> IN <label> MESSAGE INPUT
 SEND <label> MESSAGE <value>
 SEND <label> MESSAGE ... END
 SEND <label> IN <label> MESSAGE <value>

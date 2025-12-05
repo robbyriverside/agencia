@@ -4,15 +4,17 @@
 INPUT
 INPUT <label>
 
-SEND <label> LIST <value>  // send multiple messages to an agent
-SEND <label> LIST ... END   // send multiple messages in the list block
+SEND <label>  // shorthand for SEND <label> MESSAGE INPUT
 SEND <label> MESSAGE <value>  // send a single message to an agent
 SEND <label> MESSAGE ... END  // send message in block
+SEND <label> LIST <value>  // send multiple messages to an agent
+SEND <label> LIST ... END   // send multiple messages in the list block
 
-SEND <label> IN <label> LIST <value>  // send multiple messages to an agent in a library
-SEND <label> IN <label> LIST ... END   // send multiple messages in the list block
+SEND <label> IN <label>  // shorthand for SEND <label> IN <label> MESSAGE INPUT
 SEND <label> IN <label> MESSAGE <value>  // send a single message to an agent in a library
 SEND <label> IN <label> MESSAGE ... END  // send message in block
+SEND <label> IN <label> LIST <value>  // send multiple messages to an agent in a library
+SEND <label> IN <label> LIST ... END   // send multiple messages in the list block
 
 FACT <label> IN <label>
 FACT <label>

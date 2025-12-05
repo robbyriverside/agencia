@@ -21,8 +21,10 @@ keywords:
 
   - name: SEND
     current_forms:
+      - "SEND <label>"
       - "SEND <label> MESSAGE <value>"
       - "SEND <label> MESSAGE ... END"
+      - "SEND <label> IN <label>"
       - "SEND <label> IN <label> MESSAGE <value>"
       - "SEND <label> LIST <value>"
       - "SEND <label> LIST ... END"
@@ -37,6 +39,7 @@ keywords:
 
   - name: IN
     current_forms:
+      - "SEND <label> IN <label>"
       - "SEND <label> IN <label> ..."
       - "FACT <label> IN <label>"
     alternatives:

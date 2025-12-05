@@ -137,7 +137,9 @@ func translateSend(content string) (string, error) {
 	}
 	modeToken, payload := splitFirstToken(remainder)
 	if modeToken == "" {
-		return "", fmt.Errorf("invalid SEND directive: %s", content)
+		// Default to MESSAGE INPUT shorthand when no payload is provided.
+		modeToken = "MESSAGE"
+		payload = "INPUT"
 	}
 	switch strings.ToUpper(modeToken) {
 	case "MESSAGE":

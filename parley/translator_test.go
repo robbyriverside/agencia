@@ -280,6 +280,16 @@ func TestTranslateAndExecute(t *testing.T) {
 			expected: "call_with:greet:Hello world",
 		},
 		{
+			name:     "SendMessageShorthand",
+			parley:   "{{ SEND greet }}",
+			expected: "call_with:greet:Hello world",
+		},
+		{
+			name:     "SendMessageShorthandLibrary",
+			parley:   "{{ SEND summarize IN profile }}",
+			expected: "call_with:profile.summarize:Hello world",
+		},
+		{
 			name:     "SendMessageBlock",
 			parley:   `{{ SEND greet MESSAGE }}Thank you!{{ END }}`,
 			expected: "call_with:greet:Thank you!",
