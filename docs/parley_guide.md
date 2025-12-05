@@ -325,10 +325,24 @@ Agencia comes with a set of built-in agents that you can call to do common tasks
 
 | Library Agent | Description |
 | :--- | :--- |
-| `time.now` | Returns the current date and time (e.g. "Monday, January 1, 2024 at 12:00 PM"). |
-| `time.date` | Returns the current date only (e.g. "2024-01-01"). |
-| `time.clock` | Returns the current time only (e.g. "12:00:00"). |
-| `math.random` | Returns a random number between 0 and 1. |
-| `math.coin_flip` | Returns "Heads" or "Tails". |
-| `text.uuid` | Generates a unique identifier (UUID). |
-| `web.search` | Perform a web search and return a summary of results. |
+| `now IN time` | Returns the current date and time (e.g. "Monday, January 1, 2024 at 12:00 PM"). |
+| `date IN time` | Returns the current date only (e.g. "2024-01-01"). |
+| `clock IN time` | Returns the current time only (e.g. "12:00:00"). |
+| `random IN math` | Returns a random number between 0 and 1. |
+| `coin_flip IN math` | Returns "Heads" or "Tails". |
+| `uuid IN text` | Generates a unique identifier (UUID). |
+| `search IN web` | Perform a web search and return a summary of results. |
+
+### Calling Library Agents
+
+Library agents are special agents that are always available. Use the `IN` keyword to specify the library where the agent can be found.
+
+**Syntax:** `{{ SEND <agent> IN <library> MESSAGE <value> }}`
+
+**Example:**
+
+```yaml
+template: |
+  I checked the clock and the time is {{ SEND now IN time }}.
+  I also flipped a coin and it came up {{ SEND coin_flip IN math }}.
+```
