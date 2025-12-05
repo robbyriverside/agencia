@@ -117,6 +117,13 @@ If the `username` fact was previously saved as "John", the agent says "Hello, Jo
 
 Once a Fact is saved, you can use it in any other agent. You can often leave out the word `FACT` if it's clear what you mean, like inside a list or a check.
 
+To get a fact from a specific agent, use `IN`:
+
+```yaml
+    template: |
+      I remember your name is {{ FACT username IN assistant }}.
+```
+
 ## 4. Making Decisions (Conditionals)
 
 Sometimes you want your agent to say different things based on the situation. We use `IF`, `THEN`, and `ELSE` for this.
@@ -323,15 +330,46 @@ Capture a value into a variable (LET) and use it later (USE).
 
 Agencia comes with a set of built-in agents that you can call to do common tasks. These agents are available to your templates automatically.
 
-| Library Agent | Description |
-| :--- | :--- |
-| `now IN time` | Returns the current date and time (e.g. "Monday, January 1, 2024 at 12:00 PM"). |
-| `date IN time` | Returns the current date only (e.g. "2024-01-01"). |
-| `clock IN time` | Returns the current time only (e.g. "12:00:00"). |
-| `random IN math` | Returns a random number between 0 and 1. |
-| `coin_flip IN math` | Returns "Heads" or "Tails". |
-| `uuid IN text` | Generates a unique identifier (UUID). |
-| `search IN web` | Perform a web search and return a summary of results. |
+### time
+
+**now**
+Returns the current date and time.
+*   **Syntax**: `{{ SEND now IN time }}`
+*   **Inputs**:
+    *   `format` (optional): How to format the time (e.g. "Kitchen", "RFC3339").
+    *   `timezone` (optional): Specific timezone (e.g. "America/New_York").
+
+**date**
+Returns the current date only (e.g. "2024-01-01").
+*   **Syntax**: `{{ SEND date IN time }}`
+
+**clock**
+Returns the current time only (e.g. "12:00:00").
+*   **Syntax**: `{{ SEND clock IN time }}`
+
+### math
+
+**random**
+Returns a random number between 0 and 1.
+*   **Syntax**: `{{ SEND random IN math }}`
+
+**coin_flip**
+Returns "Heads" or "Tails".
+*   **Syntax**: `{{ SEND coin_flip IN math }}`
+
+### text
+
+**uuid**
+Generates a unique identifier (UUID).
+*   **Syntax**: `{{ SEND uuid IN text }}`
+
+### web
+
+**search**
+Perform a web search and return a summary of results.
+*   **Syntax**: `{{ SEND search IN web }}`
+*   **Inputs**:
+    *   `query` (required): The text to search for.
 
 ### Calling Library Agents
 
