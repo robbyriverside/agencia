@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/robbyriverside/agencia/parley"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v3"
 )
@@ -114,6 +115,9 @@ func LintSpecFile(source []byte) LintResult {
 	// Regex to find .Get "agentname" and .Start "agentname"
 	referenceRegex := regexp.MustCompile(`\.(Get|Start)\s+"([^"]+)"`)
 
+	// Detect if this is a Go template spec (has //go header)
+	isGoTemplate := strings.HasPrefix(string(source), "//go")
+
 	// Validate each agent
 	for name, node := range definedAgents {
 		kindSet := map[string]bool{}
@@ -131,15 +135,83 @@ func LintSpecFile(source []byte) LintResult {
 			switch key {
 			case "prompt", "template", "alias", "function":
 				kindSet[key] = true
-				// For prompt and template, check for .Get and .Start references
 				if key == "prompt" || key == "template" {
-					matches := referenceRegex.FindAllStringSubmatch(val.Value, -1)
-					for _, match := range matches {
-						refAgent := match[2]
-						if !agentNames[refAgent] && !strings.Contains(refAgent, ".") {
-							errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s' references undefined agent '%s' via .%s. Please ensure all referenced agents exist.", val.Line, name, refAgent, match[1]))
-						} else {
-							referencedAgents[refAgent] = true
+					if isGoTemplate {
+						// Go Template Validation
+						matches := referenceRegex.FindAllStringSubmatch(val.Value, -1)
+						for _, match := range matches {
+							refAgent := match[2]
+							if !agentNames[refAgent] && !strings.Contains(refAgent, ".") {
+								errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s' references undefined agent '%s' via .%s. Please ensure all referenced agents exist.", val.Line, name, refAgent, match[1]))
+							} else {
+								referencedAgents[refAgent] = true
+							}
+						}
+					} else {
+						// Parley Validation
+						// Build validation context lazily or once?
+						// For now, build a partial context for this agent.
+						// Note: definedAgents is *yaml.Node map. We need structured info.
+						// This is expensive to do inside the loop if we need full context.
+						// Ideally, we parse all agents first into a struct map, then validate.
+						// But sticking to linter structure:
+						// We can build the Agents map for validator from definedAgents keys + minimal info we can extract?
+						// Or just pass names for existence check.
+						// For input/fact verification, we need to look up other agents.
+						ctx := parley.ValidationContext{
+							Agents:       make(map[string]parley.AgentInfo),
+							Roles:        nil, // Not used heavily yet
+							CurrentAgent: name,
+						}
+						// Populate ctx with available agents
+						for aName, aNode := range definedAgents {
+							inputs := map[string]bool{}
+							facts := map[string]bool{}
+							// Scan agent node for definition
+							for k := 0; k < len(aNode.Content)-1; k += 2 {
+								kKey := aNode.Content[k].Value
+								kVal := aNode.Content[k+1]
+								if kKey == "inputs" && kVal.Kind == yaml.MappingNode {
+									for m := 0; m < len(kVal.Content)-1; m += 2 {
+										inputs[kVal.Content[m].Value] = true
+									}
+								}
+								if kKey == "facts" && kVal.Kind == yaml.SequenceNode { // Facts is list of maps or just maps? Docs say list of maps usually
+									for _, fItem := range kVal.Content {
+										if fItem.Kind == yaml.MappingNode {
+											// fact name is key? logic in translator/validator assumes map keys?
+											// Actually facts in YAML spec:
+											// facts:
+											//   - name: foo
+											//     description: ...
+											// Or map?
+											// check checkDuplicateAgentNames or loadAgentSpec.
+											// agents.go: Facts map[string]*Fact.
+											// YAML unmarshal might handle map or list?
+											// Let's look at linter lines 167: factsNode = val.
+											// It iterates val.Content (SequenceNode).
+											// So it's a list.
+											for n := 0; n < len(fItem.Content)-1; n += 2 {
+												if fItem.Content[n].Value == "name" {
+													facts[fItem.Content[n+1].Value] = true
+												}
+											}
+										}
+									}
+								}
+							}
+							ctx.Agents[aName] = parley.AgentInfo{
+								Inputs: inputs,
+								Facts:  facts,
+							}
+						}
+						// Also Add Library Agents if possible?
+						// For now skip library agent detail validation.
+
+						validator := parley.NewValidator(ctx)
+						parleyErrors := validator.Validate(val.Value)
+						for _, pErr := range parleyErrors {
+							errors = append(errors, fmt.Sprintf("Problem: Line %d: Agent '%s': %s", val.Line, name, pErr))
 						}
 					}
 				}
