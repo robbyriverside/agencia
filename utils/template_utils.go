@@ -9,8 +9,15 @@ import (
 // TemplateParse parses a template with the sprig FuncMap and additional functions.
 func TemplateParse(name, tmplStr string) (*template.Template, error) {
 	// add more as needed
-	funcs := template.FuncMap{"truncate": truncate}
+	funcs := template.FuncMap{
+		"truncate": truncate,
+		"hide":     hide,
+	}
 	return template.New(name).Funcs(sprig.FuncMap()).Funcs(funcs).Parse(tmplStr)
+}
+
+func hide(v any) string {
+	return ""
 }
 
 func truncate(s string, n int) string {

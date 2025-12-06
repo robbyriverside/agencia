@@ -115,7 +115,7 @@ Future<ParleyValue?> lookup(Runtime runtime, String label) async {
 
 - Keep directive parsers lightweight: tokenize by braces, then match against the forms listed in
   `parley_forms.txt`.
-- Wrap `ParleyValue` around Dart primitives (`StringValue`, `ListValue`, etc.) so conversions are safe.
+- Wrap `ParleyValue` around Dart primitives (`TextValue`, `ListValue`, etc.) so conversions are safe.
 - Expose formatting helpers (`LIST`, `CALL ... ON LIST`, etc.) as extension methods on `Runtime`.
 
 This structure slots into a Dart service or Flutter widget tree, keeping Parley’s declarative

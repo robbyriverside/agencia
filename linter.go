@@ -176,26 +176,20 @@ func LintSpecFile(source []byte) LintResult {
 										inputs[kVal.Content[m].Value] = true
 									}
 								}
-								if kKey == "facts" && kVal.Kind == yaml.SequenceNode { // Facts is list of maps or just maps? Docs say list of maps usually
-									for _, fItem := range kVal.Content {
-										if fItem.Kind == yaml.MappingNode {
-											// fact name is key? logic in translator/validator assumes map keys?
-											// Actually facts in YAML spec:
-											// facts:
-											//   - name: foo
-											//     description: ...
-											// Or map?
-											// check checkDuplicateAgentNames or loadAgentSpec.
-											// agents.go: Facts map[string]*Fact.
-											// YAML unmarshal might handle map or list?
-											// Let's look at linter lines 167: factsNode = val.
-											// It iterates val.Content (SequenceNode).
-											// So it's a list.
-											for n := 0; n < len(fItem.Content)-1; n += 2 {
-												if fItem.Content[n].Value == "name" {
-													facts[fItem.Content[n+1].Value] = true
+								if kKey == "facts" {
+									if kVal.Kind == yaml.SequenceNode {
+										for _, fItem := range kVal.Content {
+											if fItem.Kind == yaml.MappingNode {
+												for n := 0; n < len(fItem.Content)-1; n += 2 {
+													if fItem.Content[n].Value == "name" {
+														facts[fItem.Content[n+1].Value] = true
+													}
 												}
 											}
+										}
+									} else if kVal.Kind == yaml.MappingNode {
+										for m := 0; m < len(kVal.Content)-1; m += 2 {
+											facts[kVal.Content[m].Value] = true
 										}
 									}
 								}
@@ -205,8 +199,24 @@ func LintSpecFile(source []byte) LintResult {
 								Facts:  facts,
 							}
 						}
-						// Also Add Library Agents if possible?
-						// For now skip library agent detail validation.
+						// Add Library Agents
+						for libName, lib := range libraries {
+							for aName, agent := range lib.Agents {
+								inputs := map[string]bool{}
+								facts := map[string]bool{}
+								for k := range agent.Inputs {
+									inputs[k] = true
+								}
+								for k := range agent.Facts {
+									facts[k] = true
+								}
+								ctx.Agents[fmt.Sprintf("%s.%s", libName, aName)] = parley.AgentInfo{
+									Inputs:    inputs,
+									Facts:     facts,
+									IsLibrary: true,
+								}
+							}
+						}
 
 						validator := parley.NewValidator(ctx)
 						parleyErrors := validator.Validate(val.Value)

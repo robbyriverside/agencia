@@ -1,8 +1,10 @@
 # Programming with Agencia
 
-Here is how program using Agencia. Agencia is a platform where you create AI "Agents" to interpret user requests and help them with tasks.
+Here is how to program using Agencia. Agencia is a platform where you create AI "Agents" to interpret user requests and help them with tasks.
 
-Instead of writing complex code, you write "Agents" in a simple checklist format (YAML) and give them instructions using **Parley**, a language designed to be as close to English as possible.
+Instead of writing complex code, you write "Agents" in a simple indented format (YAML) and give them instructions using **Parley**, a language designed to be as close to English as possible.
+
+TO DO: Read about YAML.  LMGTFY
 
 ## 1. What is an Agent?
 
@@ -87,7 +89,21 @@ agents:
 
 This would output: "Hello! It is 12:00 PM."
 
-You can also save the result of a call to use it later, which makes your instructions easier to read.
+### Suppressing Output (`HIDE`)
+
+Normally, when you `SEND` a message, the response is inserted into the text. Sometimes you want to perform an action (like sending data to another agent) without showing the result.
+
+```yaml
+    template: |
+      {{ HIDE SEND logger MESSAGE INPUT }}
+      I have logged your message.
+```
+
+By adding `HIDE` before `SEND`, the action is performed, but nothing is printed to the final output.
+
+### Variables: Saving Results (`LET` / `USE`)
+
+You can save the result of a call to use it later, which makes your instructions easier to read.
 
 ```yaml
     template: |
@@ -95,34 +111,45 @@ You can also save the result of a call to use it later, which makes your instruc
       Hello! I checked the clock and {{ USE time }}.
 ```
 
+The `LET` keyword captures the output of an action (like `SEND`) and saves it to a variable (e.g., `time`). The `USE` keyword inserts that variable's contents into the text.
+
 ## 3. Facts: Outputs and Memory
 
-Just like the AI extracts `Inputs` from what the user says, it can also extract `Facts` from what an Agent says (returns). Facts are the "Output" of the agent that we want to save.
+Just like the AI extracts `Inputs` from what the user says, it can also extract `Facts` from how the Agent responds. Facts are values extracted from the Agent's response, and will be saved for later use.
 
 To allow an agent to save information for later, you define it in a `facts` section.
 
 ```yaml
 agents:
-  assistant:
+  profiler:
     facts:
       username:
         description: "The user's name"
     template: |
-      Hello, {{ FACT username }}.
+      {{ INPUT username }}
+
+  assistant:
+    description: "Greet the user"
+    template: |
+      {{ HIDE SEND profiler MESSAGE INPUT }}
+      Hello, {{ FACT username IN profiler }}.
 ```
 
 If the `username` fact was previously saved as "John", the agent says "Hello, John."
 
 ### Using Facts
 
-Once a Fact is saved, you can use it in any other agent. You can often leave out the word `FACT` if it's clear what you mean, like inside a list or a check.
+Once a Fact is saved, you can use it in any other agent.  Facts allow agents to share information and work together. 
 
 To get a fact from a specific agent, use `IN`:
 
 ```yaml
     template: |
+      {{ HIDE SEND assistant MESSAGE "Hello my username is Shirley" }}
       I remember your name is {{ FACT username IN assistant }}.
 ```
+
+Notice the keyword **HIDE**. As explained earlier, this allows the `assistant` to update its facts without cluttering the current output.
 
 ## 4. Making Decisions (Conditionals)
 
@@ -148,13 +175,34 @@ You can check if things are `EMPTY`, `IS` a specific value, or `IS NOT` a value.
       {{ END }}
 ```
 
+### Comparison Operators
+
+You can use the following operators to compare values:
+
+| Operator | Description | Example |
+| :--- | :--- | :--- |
+| `IS` | Check if two values are equal. | `{{ IF INPUT user IS admin THEN }}` |
+| `IS NOT` | Check if two values are different. | `{{ IF INPUT status IS NOT active THEN }}` |
+| `IS EMPTY` | Check if a value is missing or empty. | `{{ IF INPUT name IS EMPTY THEN }}` |
+| `IS NOT EMPTY` | Check if a value exists. | `{{ IF INPUT name IS NOT EMPTY THEN }}` |
+| `HAS` | Check if a list contains a value (Set Lookup). | `{{ IF FACT shopping_list HAS Milk THEN }}` |
+
 ## 5. Working with Lists (Iteration)
 
 Often you have a list of items, like a shopping list or a set of reminders. Parley makes it easy to show these lists.
 
-Imagine you have a fact called `shopping_list` with items like "Milk", "Eggs", and "Bread".
+First, let's create a list using `LET`. We use a block structure with bullet points:
 
-By default, lists are shown as bullet points. To show a list, we use the `AS BULLETS` command:
+```yaml
+    template: |
+      {{ LET shopping_list BE }}
+        - Milk
+        - Eggs
+        - Bread
+      {{ END }}
+```
+
+Now that we have a list, we can show it. By default, lists are shown as bullet points. To show a list, we use the `AS BULLETS` command:
 
 ```yaml
     template: |
@@ -349,6 +397,12 @@ Returns the current time only (e.g. "12:00:00").
 
 ### math
 
+**compute**
+Performs a calculation.
+*   **Syntax**: `{{ SEND compute IN math }}`
+*   **Inputs**:
+    *   `expression` (required): The expression to evaluate.
+
 **random**
 Returns a random number between 0 and 1.
 *   **Syntax**: `{{ SEND random IN math }}`
@@ -370,6 +424,16 @@ Perform a web search and return a summary of results.
 *   **Syntax**: `{{ SEND search IN web }}`
 *   **Inputs**:
     *   `query` (required): The text to search for.
+
+### mcp
+
+**call_tool**
+Executes a tool on a connected MCP server.
+*   **Syntax**: `{{ SEND call_tool IN mcp }}`
+*   **Inputs**:
+    *   `server` (required): Name of the MCP server.
+    *   `tool` (required): Name of the tool to execute.
+    *   `arguments` (optional): JSON string of arguments.
 
 ### Calling Library Agents
 

@@ -74,15 +74,23 @@ func (v *Validator) validateDirective(content string) error {
 	upper := strings.ToUpper(content)
 
 	// Handle Block Starts
-	if strings.HasPrefix(upper, "SEND ") {
+	// Handle Block Starts
+	if strings.HasPrefix(upper, "SEND ") || strings.HasPrefix(upper, "HIDE SEND ") {
+		normalizedUpper := upper
+		toValidate := content
+		if strings.HasPrefix(upper, "HIDE ") {
+			normalizedUpper = strings.TrimSpace(upper[5:]) // strip "HIDE "
+			toValidate = strings.TrimSpace(content[5:])
+		}
+
 		// Check for block form
 		// SEND ... MESSAGE (implied newline/block follows)
 		// OR SEND ... LIST
-		if strings.HasSuffix(upper, " MESSAGE") || strings.HasSuffix(upper, " LIST") {
+		if strings.HasSuffix(normalizedUpper, " MESSAGE") || strings.HasSuffix(normalizedUpper, " LIST") {
 			v.blockStack = append(v.blockStack, "SEND")
 		}
 		// Check syntax using translator's logic or custom
-		return v.validateSend(content)
+		return v.validateSend(toValidate)
 	}
 	if strings.HasPrefix(upper, "LET ") {
 		if strings.HasSuffix(upper, " BE") {
@@ -342,6 +350,8 @@ func (v *Validator) validateValue(content string) error {
 		return v.validateFact(content)
 	case strings.HasPrefix(upper, "SEND"):
 		return v.validateSend(content)
+	case strings.HasPrefix(upper, "HIDE SEND"):
+		return v.validateSend(strings.TrimSpace(content[5:]))
 	}
 	// Could be implicit fact name?
 	// "parley_forms.md": <value> Any evaluable source...

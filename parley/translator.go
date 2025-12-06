@@ -22,7 +22,7 @@ func Translate(source string) (string, error) {
 		content := strings.TrimSpace(source[contentStart:contentEnd])
 		upper := strings.ToUpper(content)
 
-		if strings.HasPrefix(upper, "SEND ") || strings.HasPrefix(upper, "LET ") {
+		if strings.HasPrefix(upper, "SEND ") || strings.HasPrefix(upper, "LET ") || strings.HasPrefix(upper, "HIDE SEND ") {
 			blockEnd := -1
 			for j := i + 1; j < len(matches); j++ {
 				nextContent := strings.TrimSpace(source[matches[j][2]:matches[j][3]])
@@ -37,10 +37,11 @@ func Translate(source string) (string, error) {
 					combined := content + "\n" + strings.Trim(blockSegment, "\n") + "\nEND"
 					var translated string
 					var err error
-					if strings.HasPrefix(upper, "SEND ") {
-						translated, err = translateSend(combined)
-					} else {
+					if strings.HasPrefix(upper, "LET ") {
 						translated, err = translateLet(combined)
+					} else {
+						// Handles both SEND and HIDE SEND
+						translated, err = translateSendOrHideSend(combined)
 					}
 					if err != nil {
 						return "", err
@@ -91,6 +92,8 @@ func translateDirective(content string) (string, error) {
 		return translateInput(content)
 	case strings.HasPrefix(upper, "SEND "):
 		return translateSend(content)
+	case strings.HasPrefix(upper, "HIDE SEND "):
+		return translateHideSend(content)
 	case strings.HasPrefix(upper, "FACT"):
 		return translateFact(content)
 	case strings.HasPrefix(upper, "IF"):
@@ -107,6 +110,29 @@ func translateDirective(content string) (string, error) {
 		// Pass through unknown directives to maintain Go template compatibility.
 		return "{{ " + content + " }}", nil
 	}
+}
+
+func translateSendOrHideSend(content string) (string, error) {
+	upper := strings.ToUpper(content)
+	if strings.HasPrefix(upper, "HIDE ") {
+		return translateHideSend(content)
+	}
+	return translateSend(content)
+}
+
+func translateHideSend(content string) (string, error) {
+	// Strip "HIDE " and treat as normal SEND
+	// content is "HIDE SEND ..."
+	// We want to translate "SEND ..." first
+	sendContent := strings.TrimSpace(content[5:]) // len("HIDE ") = 5
+	translated, err := translateSend(sendContent)
+	if err != nil {
+		return "", err
+	}
+	// translated is "{{ .Call ... }}"
+	// We want "{{ hide (.Call ...) }}"
+	inner := strings.TrimSuffix(strings.TrimPrefix(translated, "{{ "), " }}")
+	return fmt.Sprintf("{{ hide (%s) }}", inner), nil
 }
 
 func translateInput(content string) (string, error) {
@@ -377,6 +403,12 @@ func translateValue(content string) (string, error) {
 	if content == "" {
 		return "", fmt.Errorf("missing value")
 	}
+	// Check for string literal
+	if strings.HasPrefix(content, "\"") {
+		// Just return it as is, assuming it's a valid Go string literal
+		return content, nil
+	}
+
 	upper := strings.ToUpper(content)
 	switch {
 	case upper == "INPUT":
@@ -392,6 +424,12 @@ func translateValue(content string) (string, error) {
 		return fmt.Sprintf(".Lookup %q", strings.TrimSpace(content[3:])), nil
 	case strings.HasPrefix(upper, "SEND "):
 		sendDirective, err := translateSend(content)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSuffix(strings.TrimPrefix(sendDirective, "{{ "), " }}"), nil
+	case strings.HasPrefix(upper, "HIDE SEND "):
+		sendDirective, err := translateHideSend(content)
 		if err != nil {
 			return "", err
 		}
@@ -434,6 +472,9 @@ func translatePredicate(content string) (string, error) {
 			return "", err
 		}
 		expect := strings.TrimSpace(parts[1])
+		if strings.HasPrefix(expect, "\"") {
+			return fmt.Sprintf("(.Equals (%s) %s)", valueExpr, expect), nil
+		}
 		return fmt.Sprintf("(.Equals (%s) %s)", valueExpr, quoteString(expect)), nil
 	case strings.Contains(upper, " HAS "):
 		parts := strings.SplitN(content, "HAS", 2)
@@ -442,6 +483,9 @@ func translatePredicate(content string) (string, error) {
 			return "", err
 		}
 		expect := strings.TrimSpace(parts[1])
+		if strings.HasPrefix(expect, "\"") {
+			return fmt.Sprintf("(.Has (%s) %s)", valueExpr, expect), nil
+		}
 		return fmt.Sprintf("(.Has (%s) %s)", valueExpr, quoteString(expect)), nil
 	default:
 		return "", fmt.Errorf("unsupported predicate: %s", content)

@@ -1,0 +1,136 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "AgenciaSpec",
+    "type": "object",
+    "properties": {
+      "agents": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "inputs": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": { "type": "string" },
+                  "type": { "type": "string" },
+                  "required": { "type": "boolean" },
+                  "name": { "type": "string" }
+                },
+                "required": ["description"]
+              }
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "template": {
+              "type": "string"
+            },
+            "alias": {
+              "type": "string"
+            },
+            "function": {
+              "type": "string"
+            },
+            "listeners": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "facts": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": { "type": "string" },
+                  "scope": {
+                    "type": "string",
+                    "enum": ["global", "local"]
+                  },
+                  "type": { "type": "string" },
+                  "tags": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                },
+                "required": ["description"]
+              }
+            },
+            "job": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "role": {
+              "type": "string"
+            }
+          },
+          "required": [],
+          "anyOf": [
+            { "required": ["prompt"] },
+            { "required": ["template"] },
+            { "required": ["alias"] },
+            { "required": ["function"] }
+          ],
+          "not": {
+            "anyOf": [
+              { "required": ["prompt", "template"] },
+              { "required": ["prompt", "alias"] },
+              { "required": ["template", "alias"] },
+              { "required": ["prompt", "function"] },
+              { "required": ["template", "function"] },
+              { "required": ["alias", "function"] }
+            ]
+          }
+        }
+      },
+      "roles": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "description": { "type": "string" },
+            "personality": { "type": "string" },
+            "performance": { "type": "string" },
+            "inputs": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": { "type": "string" },
+                  "type": { "type": "string" },
+                  "name": { "type": "string" }
+                },
+                "required": ["description"]
+              }
+            },
+            "facts": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": { "type": "string" },
+                  "scope": { "type": "string", "enum": ["global", "local"] },
+                  "type": { "type": "string" },
+                  "tags": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "add": { "type": "boolean" }
+                },
+                "required": ["description"]
+              }
+            },
+            "observations": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "required": []
+        }
+      }
+    },
+    "required": ["agents"]
+  }

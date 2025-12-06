@@ -10,7 +10,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/robbyriverside/agencia/agents"
+	math_lib "github.com/robbyriverside/agencia/lib/math"
+	mcp_lib "github.com/robbyriverside/agencia/lib/mcp"
 	"github.com/robbyriverside/agencia/lib/rag"
+	text_lib "github.com/robbyriverside/agencia/lib/text"
+	time_lib "github.com/robbyriverside/agencia/lib/time"
+	web_lib "github.com/robbyriverside/agencia/lib/web"
 	"github.com/robbyriverside/agencia/logs"
 )
 
@@ -36,7 +41,12 @@ type Registry struct {
 type Libraries map[string]Registry
 
 var libraries Libraries = map[string]Registry{
-	"rag": {Agents: rag.Agents},
+	"rag":  {Agents: rag.Agents},
+	"time": {Agents: time_lib.Agents},
+	"math": {Agents: math_lib.Agents},
+	"text": {Agents: text_lib.Agents},
+	"web":  {Agents: web_lib.Agents},
+	"mcp":  {Agents: mcp_lib.Agents},
 }
 
 // LookupAgent resolves both unqualified and qualified agent names
