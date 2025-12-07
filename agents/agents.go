@@ -23,11 +23,11 @@ type Argument struct {
 type AgentFn func(ctx context.Context, input map[string]any, agent *Agent) (string, error)
 
 type Fact struct {
-	Name        string
-	Description string
-	Add         bool // TODO: add to existing fact or replace it (list and string append, number addition, bool NA)
-	Scope       string
-	Type        string
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	Add         bool   `yaml:"add"` // TODO: add to existing fact or replace it (list and string append, number addition, bool NA)
+	Scope       string `yaml:"scope"`
+	Type        string `yaml:"type"`
 }
 
 func (f *Fact) EmptyDefault() any {

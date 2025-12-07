@@ -153,6 +153,22 @@ func (c *Chat) Fact(name string) any {
 	if v, ok := c.Facts[name]; ok {
 		return v
 	}
+	// Fallback: check if the requested fact is global but asked for with agent prefix
+	if strings.Contains(name, ".") && c.Registry != nil {
+		parts := strings.SplitN(name, ".", 2)
+		agentName := parts[0]
+		factName := parts[1]
+		if agent, err := c.Registry.LookupAgent(agentName); err == nil {
+			if factDef, ok := agent.Facts[factName]; ok {
+				// Default scope is global
+				if factDef.Scope == "global" || factDef.Scope == "" {
+					if v, ok := c.Facts[factName]; ok {
+						return v
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -355,7 +371,15 @@ func (r *RunContext) ExtractAgentMemory(ctx context.Context, agent *agents.Agent
 
 	// Store each fact and tag, with checks for missing/empty/null
 	for k := range agent.Facts {
-		key := fmt.Sprintf("%s.%s", agent.Name, k)
+		key := k
+		// Determine scope
+		scope := "global"
+		if f, ok := agent.Facts[k]; ok && f.Scope == "local" {
+			scope = "local"
+		}
+		if scope == "local" {
+			key = fmt.Sprintf("%s.%s", agent.Name, k)
+		}
 
 		v, ok := result[k]
 		if !ok {

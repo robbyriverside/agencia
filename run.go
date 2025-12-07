@@ -14,13 +14,13 @@ import (
 )
 
 type RunContext struct {
-	IsPrint         bool
-	Chat            *Chat
-	Registry        *Registry
-	Card            *TraceCard     // prompt used for this run
-	Depth           int            // current depth of nested CallAgent invocations
-	LocalFacts      map[string]any // All facts stored locally during this run
-	openAICallCount int
+	IsPrint          bool
+	Chat             *Chat
+	Registry         *Registry
+	Card             *TraceCard     // prompt used for this run
+	Depth            int            // current depth of nested CallAgent invocations
+	LocalFacts       map[string]any // All facts stored locally during this run
+	openAICallCount  int
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
@@ -275,9 +275,13 @@ note: Have a nice day.
 		return err
 	}
 	for k, v := range factMap {
-		if _, ok := agent.Facts[k]; ok {
+		if factDef, ok := agent.Facts[k]; ok {
 			name := k
-			if !strings.Contains(k, ".") {
+			scope := "global"
+			if factDef.Scope == "local" {
+				scope = "local"
+			}
+			if scope == "local" && !strings.Contains(k, ".") {
 				name = fmt.Sprintf("%s.%s", agent.Name, k)
 			}
 			r.AssignFact(agent, name, v)
