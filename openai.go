@@ -341,11 +341,7 @@ func splitParagraphs(input string) []string {
 }
 
 func (t *TemplateContext) Start(name string) string {
-	if t.Run.Chat.IsValidStartAgent(name) {
-		t.Run.Chat.SetStartAgent(name)
-		return fmt.Sprintf("New Starting Agent: %s", name)
-	}
-	return fmt.Sprintf("Invalid Starting Agent: %s", name)
+	return t.Run.Start(name)
 }
 
 func (r *RunContext) CallAI(ctx context.Context, agent *agents.Agent, prompt string) (string, error) {

@@ -106,6 +106,8 @@ func translateDirective(content string) (string, error) {
 		return translateLookup(strings.TrimSpace(content[3:]))
 	case upper == "USE":
 		return translateLookup("")
+	case strings.HasPrefix(upper, "START "):
+		return translateStart(content)
 	default:
 		// Pass through unknown directives to maintain Go template compatibility.
 		return "{{ " + content + " }}", nil
@@ -396,6 +398,15 @@ func translateLookup(label string) (string, error) {
 		return "{{ .Lookup \"\" }}", nil
 	}
 	return fmt.Sprintf("{{ .Lookup %q }}", label), nil
+}
+
+func translateStart(content string) (string, error) {
+	agent := strings.TrimSpace(content[len("START"):])
+	if agent == "" {
+		return "", fmt.Errorf("START requires an agent name")
+	}
+	// Validate agent name format if necessary, but for now just pass it through.
+	return fmt.Sprintf("{{ .Start %q }}", agent), nil
 }
 
 func translateValue(content string) (string, error) {

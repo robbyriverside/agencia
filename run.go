@@ -582,3 +582,15 @@ func removeFirstLine(s string) string {
 	}
 	return s[idx:]
 }
+
+func (r *RunContext) Start(agentName string) string {
+	if r.Chat == nil {
+		return ""
+	}
+	if !r.Chat.IsValidStartAgent(agentName) {
+		r.Errorf("invalid agent name for START: %s", agentName)
+		return ""
+	}
+	r.Chat.SetStartAgent(agentName)
+	return ""
+}

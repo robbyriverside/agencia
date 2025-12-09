@@ -138,6 +138,8 @@ func (v *Validator) validateDirective(content string) error {
 		return v.validateIf(content)
 	case strings.HasPrefix(upper, "LIST"):
 		return v.validateList(content)
+	case strings.HasPrefix(upper, "START "):
+		return v.validateStart(content)
 	case strings.HasPrefix(upper, "USE "):
 		return v.validateUse(strings.TrimSpace(content[3:])) // Ensure binding exists? Hard to track scope statically perfectly without full pass.
 		// For static verification requested: "Only worry about mistakes that can be statically verified."
@@ -146,8 +148,8 @@ func (v *Validator) validateDirective(content string) error {
 	case upper == "USE":
 		return nil
 	default:
-		// Unknown directive
-		return fmt.Errorf("unknown Parley directive: %s", content)
+		// Unknown directive - assume it's valid Go template syntax and pass it through.
+		return nil
 	}
 }
 
@@ -172,6 +174,17 @@ func (v *Validator) validateInput(content string) error {
 		return fmt.Errorf("input '%s' is not defined for agent '%s'", inputName, v.ctx.CurrentAgent)
 	}
 
+	return nil
+}
+
+func (v *Validator) validateStart(content string) error {
+	agentToken := strings.TrimSpace(content[len("START "):])
+	if agentToken == "" {
+		return fmt.Errorf("invalid START directive: missing agent")
+	}
+	if !v.agentExists(agentToken) {
+		return fmt.Errorf("undefined agent: %s", agentToken)
+	}
 	return nil
 }
 
