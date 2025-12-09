@@ -270,3 +270,40 @@ func TestCallGemini_InvalidToolSchema(t *testing.T) {
 	// I'll skip assertion for now as behavior might differ.
 	t.Logf("Result: %+v", res)
 }
+
+func TestCallGemini_SimpleListener(t *testing.T) {
+	requireGemini(t)
+	setupGeminiConfig(t)
+	reg := &Registry{}
+	ctx := context.Background()
+
+	// 1. Define a listener agent that returns a specific unique code
+	reg.RegisterAgent(&agents.Agent{
+		Name:        "secret_keeper",
+		Description: "Returns a secret verification code.",
+		Function: func(ctx context.Context, input map[string]any, agent *agents.Agent) (string, error) {
+			return "VerificationCode123", nil
+		},
+		Inputs: map[string]*agents.Argument{
+			"dummy": {
+				Description: "Ignored input",
+			},
+		},
+	})
+
+	// 2. Define a caller agent that has secret_keeper as a listener
+	reg.RegisterAgent(&agents.Agent{
+		Name:        "verifier",
+		Description: " calls secret_keeper and reports the code.",
+		Prompt:      "Call the tool 'secret_keeper' with any argument, and tell me the code it returns.",
+		Listeners:   []string{"secret_keeper"},
+	})
+
+	// 3. Run the agent
+	res := NewRun(reg, nil).CallAgent(ctx, "verifier", "Get the secret code")
+	assert.NoError(t, res.Error, "should not error")
+
+	// 4. Verify that the output contains the code from the listener
+	// This proves that Gemini called the tool (which is the listener agent)
+	assert.Contains(t, res.Output, "VerificationCode123", "should contain the secret code from the listener")
+}
